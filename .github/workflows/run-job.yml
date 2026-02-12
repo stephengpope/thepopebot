@@ -28,7 +28,7 @@ jobs:
           if [ -n "$IMAGE_URL" ]; then
             IMAGE="${IMAGE_URL}:latest"
           else
-            IMAGE="stephengpope/thepopebot:latest"
+            IMAGE="ghcr.io/dtc2002/cruciblebot:latest"
           fi
           echo "Using image: $IMAGE"
           docker run --rm \

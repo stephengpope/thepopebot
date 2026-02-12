@@ -232,27 +232,34 @@ async function main() {
   // ─────────────────────────────────────────────────────────────────────────────
   printStep(++currentStep, TOTAL_STEPS, 'API Keys');
 
-  console.log(chalk.dim('  Anthropic API key is required. Others are optional.\n'));
+  const llmProvider = (process.env.PROVIDER || process.env.LLM_PROVIDER || 'anthropic').toLowerCase();
 
-  // Anthropic (required)
-  const openAnthropicPage = await confirm('Open Anthropic API key page in browser?');
-  if (openAnthropicPage) {
-    await open('https://platform.claude.com/settings/keys');
-    printInfo('Opened in browser. Create an API key and copy it.');
-  }
+  if (llmProvider === 'ollama') {
+    console.log(chalk.dim('  Provider = ollama. Skipping Anthropic API key.\n'));
+    anthropicKey = '';
+  } else {
+    console.log(chalk.dim('  Anthropic API key is required. Others are optional.\n'));
 
-  let anthropicValid = false;
-  while (!anthropicValid) {
-    anthropicKey = await promptForAnthropicKey();
+    // Anthropic (required)
+    const openAnthropicPage = await confirm('Open Anthropic API key page in browser?');
+    if (openAnthropicPage) {
+      await open('https://platform.claude.com/settings/keys');
+      printInfo('Opened in browser. Create an API key and copy it.');
+    }
 
-    const validateSpinner = ora('Validating Anthropic API key...').start();
-    const validation = await validateAnthropicKey(anthropicKey);
+    let anthropicValid = false;
+    while (!anthropicValid) {
+      anthropicKey = await promptForAnthropicKey();
 
-    if (validation.valid) {
-      validateSpinner.succeed('Anthropic API key valid');
-      anthropicValid = true;
-    } else {
-      validateSpinner.fail(`Invalid key: ${validation.error}`);
+      const validateSpinner = ora('Validating Anthropic API key...').start();
+      const validation = await validateAnthropicKey(anthropicKey);
+
+      if (validation.valid) {
+        validateSpinner.succeed('Anthropic API key valid');
+        anthropicValid = true;
+      } else {
+        validateSpinner.fail(`Invalid key: ${validation.error}`);
+      }
     }
   }
 

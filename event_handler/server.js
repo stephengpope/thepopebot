@@ -9,17 +9,35 @@ const { loadCrons } = require('./cron');
 const { loadTriggers } = require('./triggers');
 const { setWebhook, sendMessage, formatJobNotification, downloadFile, reactToMessage, startTypingIndicator } = require('./tools/telegram');
 const { isWhisperEnabled, transcribeAudio } = require('./tools/openai');
-const { chat } = require('./claude');
+const { chat, summarizeJobWithLlm } = require('./llm');
 const { toolDefinitions, toolExecutors } = require('./claude/tools');
 const { getHistory, updateHistory } = require('./claude/conversation');
 const { githubApi, getJobStatus } = require('./tools/github');
-const { getApiKey } = require('./claude');
 const { render_md } = require('./utils/render-md');
 
 const app = express();
 
+console.log("[ENV] GH_TOKEN present:", Boolean(process.env.GH_TOKEN), "len:", (process.env.GH_TOKEN || "").length);
+console.log("[ENV] GITHUB_TOKEN present:", Boolean(process.env.GITHUB_TOKEN), "len:", (process.env.GITHUB_TOKEN || "").length);
+
 app.use(helmet());
 app.use(express.json());
+
+// --- Approval-loop stopper (minimal, deterministic) ---
+const pendingJobDraft = new Map(); // chatId -> drafted job description awaiting approval
+
+function isApproval(text) {
+  const t = String(text || '').trim().toLowerCase();
+  return t === 'approved' || t === 'approve' || t === 'yes' || t === 'y';
+}
+
+function extractJobDraftFromAssistant(text) {
+  const s = String(text || '');
+  const m = s.match(/Job Description:\s*([\s\S]*?)$/i);
+  const draft = (m ? m[1] : '').trim();
+  return draft.length ? draft : null;
+}
+// --- end approval-loop stopper ---
 
 const { API_KEY, TELEGRAM_WEBHOOK_SECRET, TELEGRAM_BOT_TOKEN, GH_WEBHOOK_SECRET, GH_OWNER, GH_REPO, TELEGRAM_CHAT_ID, TELEGRAM_VERIFICATION } = process.env;
 
@@ -154,14 +172,52 @@ app.post('/telegram/webhook', async (req, res) => {
     if (messageText) {
       const stopTyping = startTypingIndicator(telegramBotToken, chatId);
       try {
-        // Get conversation history and process with Claude
+        // Get conversation history
         const history = getHistory(chatId);
+
+        // --- Approval shortcut: if there's a pending draft and user approves, create job directly ---
+        if (isApproval(messageText)) {
+          const draft = pendingJobDraft.get(chatId);
+          if (draft) {
+            try {
+              const result = await createJob(draft);
+              pendingJobDraft.delete(chatId);
+
+              const msg = result?.job_id
+                ? `✅ Approved. Job created.\nJob ID: ${result.job_id}\nBranch: ${result.branch || '(see job)'}`
+                : '✅ Approved. Job created.';
+
+              await sendMessage(telegramBotToken, chatId, msg);
+            } catch (err) {
+              await sendMessage(
+                telegramBotToken,
+                chatId,
+                `✅ Approved, but job creation failed:\n${err?.message || String(err)}`
+              ).catch(() => {});
+            } finally {
+              stopTyping();
+            }
+            return; // do not call the LLM for this update
+          }
+        }
+
+        // Process with LLM
         const { response, history: newHistory } = await chat(
           messageText,
           history,
           toolDefinitions,
           toolExecutors
         );
+
+        // Cache drafted job description if assistant is asking for approval
+        const maybeDraft = extractJobDraftFromAssistant(response);
+        if (
+          maybeDraft &&
+          /respond with\s+"approved"|respond with\s+approved|responding with\s+"approved"/i.test(response)
+        ) {
+          pendingJobDraft.set(chatId, maybeDraft);
+        }
+
         updateHistory(chatId, newHistory);
 
         // Send response (auto-splits if needed)
@@ -200,13 +256,7 @@ function extractJobId(branchName) {
  */
 async function summarizeJob(results) {
   try {
-    const apiKey = getApiKey();
-
     // System prompt from JOB_SUMMARY.md (supports {{includes}})
-    const systemPrompt = render_md(
-      path.join(__dirname, '..', 'operating_system', 'JOB_SUMMARY.md')
-    );
-
     // User message: structured job results
     const userMessage = [
       results.job ? `## Task\n${results.job}` : '',
@@ -218,25 +268,10 @@ async function summarizeJob(results) {
       results.log ? `## Agent Log\n${results.log}` : '',
     ].filter(Boolean).join('\n\n');
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: process.env.EVENT_HANDLER_MODEL || 'claude-sonnet-4-20250514',
-        max_tokens: 1024,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userMessage }],
-      }),
+    return await summarizeJobWithLlm({
+      systemPromptPath: path.join(__dirname, '..', 'operating_system', 'JOB_SUMMARY.md'),
+      userMessage,
     });
-
-    if (!response.ok) throw new Error(`Claude API error: ${response.status}`);
-
-    const result = await response.json();
-    return (result.content?.[0]?.text || '').trim() || 'Job completed.';
   } catch (err) {
     console.error('Failed to summarize job:', err);
     return 'Job completed.';

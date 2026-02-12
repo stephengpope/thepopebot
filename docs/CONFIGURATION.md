@@ -15,9 +15,11 @@ All environment variables for the Event Handler (set in `event_handler/.env`):
 | `TELEGRAM_CHAT_ID` | Restricts bot to this chat only | For security |
 | `TELEGRAM_WEBHOOK_SECRET` | Secret for webhook validation | No |
 | `GH_WEBHOOK_SECRET` | Secret for GitHub Actions webhook auth | For notifications |
-| `ANTHROPIC_API_KEY` | Claude API key for chat functionality | For chat |
+| `OLLAMA_HOST` | Ollama base URL for local chat (e.g., `http://localhost:11434`) | For local chat |
+| `EVENT_HANDLER_MODEL` | Model name for local chat (e.g., `qwen2.5-coder:14b`) | No |
+| `ANTHROPIC_API_KEY` | Claude API key for chat functionality (only if using Anthropic) | If using Anthropic |
 | `OPENAI_API_KEY` | OpenAI key for voice transcription | For voice |
-| `EVENT_HANDLER_MODEL` | Claude model for chat (default: claude-sonnet-4) | No |
+| `OLLAMA_TEMPERATURE` | Optional: temperature for Ollama chat (default: 0.2) | No |
 
 ---
 

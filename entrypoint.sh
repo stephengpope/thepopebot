@@ -74,8 +74,24 @@ PROMPT="
 $(cat /job/logs/${JOB_ID}/job.md)"
 
 MODEL_FLAGS=""
-if [ -n "$MODEL" ]; then
-    MODEL_FLAGS="--provider anthropic --model $MODEL"
+
+# Provider selection for the Pi coding agent.
+#
+# - Default: Anthropic (original popebot behavior)
+# - Ollama: Uses the agent's OpenAI-compatible provider and points it at Ollama's /v1 endpoint.
+#   This requires running jobs on a machine/network that can reach your Ollama instance.
+#   If you're using GitHub-hosted runners, this will NOT be reachable unless you expose Ollama publicly (not recommended).
+#
+PROVIDER="${PROVIDER:-anthropic}"
+if [ "$PROVIDER" = "ollama" ]; then
+    # Ollama OpenAI-compatible endpoint (Ollama >= 0.1.26+ typically)
+    export OPENAI_BASE_URL="${OPENAI_BASE_URL:-${OLLAMA_OPENAI_BASE_URL:-http://host.docker.internal:11434/v1}}"
+    export OPENAI_API_KEY="${OPENAI_API_KEY:-ollama}"
+    MODEL_FLAGS="--provider openai --model ${MODEL:-qwen2.5-coder:14b}"
+else
+    if [ -n "$MODEL" ]; then
+        MODEL_FLAGS="--provider anthropic --model $MODEL"
+    fi
 fi
 
 pi $MODEL_FLAGS -p "$PROMPT" --session-dir "${LOG_DIR}"
