@@ -1,0 +1,40 @@
+name: Run thepopebot Job
+
+on:
+  create:
+
+jobs:
+  run-agent:
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'branch' && startsWith(github.ref_name, 'job/')
+    permissions:
+      contents: write
+      packages: read
+
+    steps:
+      - name: Login to GHCR
+        if: startsWith(vars.IMAGE_URL, 'ghcr.io/')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run thepopebot Agent
+        env:
+          IMAGE_URL: ${{ vars.IMAGE_URL }}
+          MODEL: ${{ vars.MODEL }}
+        run: |
+          if [ -n "$IMAGE_URL" ]; then
+            IMAGE="${IMAGE_URL}:latest"
+          else
+            IMAGE="ghcr.io/dtc2002/cruciblebot:latest"
+          fi
+          echo "Using image: $IMAGE"
+          docker run --rm \
+            -e REPO_URL="${{ github.server_url }}/${{ github.repository }}.git" \
+            -e BRANCH="${{ github.ref_name }}" \
+            -e SECRETS='${{ secrets.SECRETS }}' \
+            -e LLM_SECRETS='${{ secrets.LLM_SECRETS }}' \
+            -e MODEL="${MODEL}" \
+            "$IMAGE"

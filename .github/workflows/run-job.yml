@@ -1,40 +1,35 @@
-name: Run thepopebot Job
+name: Run CrucibleBot Job (local win10)
 
 on:
   create:
 
 jobs:
   run-agent:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, windows]
     if: github.ref_type == 'branch' && startsWith(github.ref_name, 'job/')
     permissions:
       contents: write
-      packages: read
+      pull-requests: write
 
     steps:
-      - name: Login to GHCR
-        if: startsWith(vars.IMAGE_URL, 'ghcr.io/')
-        uses: docker/login-action@v3
+      - name: Checkout job branch
+        uses: actions/checkout@v4
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
 
-      - name: Run thepopebot Agent
-        env:
-          IMAGE_URL: ${{ vars.IMAGE_URL }}
-          MODEL: ${{ vars.MODEL }}
+      - name: Show context
+        shell: pwsh
         run: |
-          if [ -n "$IMAGE_URL" ]; then
-            IMAGE="${IMAGE_URL}:latest"
-          else
-            IMAGE="ghcr.io/dtc2002/cruciblebot:latest"
-          fi
-          echo "Using image: $IMAGE"
-          docker run --rm \
-            -e REPO_URL="${{ github.server_url }}/${{ github.repository }}.git" \
-            -e BRANCH="${{ github.ref_name }}" \
-            -e SECRETS='${{ secrets.SECRETS }}' \
-            -e LLM_SECRETS='${{ secrets.LLM_SECRETS }}' \
-            -e MODEL="${MODEL}" \
-            "$IMAGE"
+          Write-Host "Repo: $env:GITHUB_REPOSITORY"
+          Write-Host "Ref name: $env:GITHUB_REF_NAME"
+          git status
+
+      # PROVE the runner can execute and push back to the job branch.
+      - name: Apply job (smoke test)
+        shell: pwsh
+        run: |
+          Set-Content -Path test.txt -Value "hello"
+          git add -A
+          git commit -m "cruciblebot: apply job $env:GITHUB_REF_NAME" || Write-Host "Nothing to commit"
+          git push origin HEAD
