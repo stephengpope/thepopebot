@@ -43,12 +43,5 @@
     "url": "https://example.com/health",
     "method": "GET",
     "enabled": false
-  },
-  {
-    "name": "daily-financial-research",
-    "schedule": "0 14 * * 1-5",
-    "type": "agent",
-    "job": "Read the file at operating_system/FINANCIAL_ADVISOR/FINANCIAL_ADVISOR.md and complete the tasks described there.",
-    "enabled": true
   }
 ]

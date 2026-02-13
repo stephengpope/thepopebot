@@ -1,0 +1,11 @@
+﻿{
+  "agentId": 3,
+  "agentName": "DESKTOP-4LKT2T8",
+  "poolId": 1,
+  "poolName": "Default",
+  "serverUrl": "https://pipelinesghubeus25.actions.githubusercontent.com/sfVcWx6V9tLOBtv2xjLNsbyqaQwm9FGKqSqi1mHTPiVhqFEwc9/",
+  "gitHubUrl": "https://github.com/dtc2002/Bookforge",
+  "workFolder": "_work",
+  "useV2Flow": true,
+  "serverUrlV2": "https://broker.actions.githubusercontent.com/"
+}

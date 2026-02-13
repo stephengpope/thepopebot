@@ -99,7 +99,7 @@ pi $MODEL_FLAGS -p "$PROMPT" --session-dir "${LOG_DIR}"
 # 2. Commit changes + logs
 git add -A
 git add -f "${LOG_DIR}"
-git commit -m "thepopebot: job ${JOB_ID}" || true
+git commit -m "cruciblebot: job ${JOB_ID}" || true
 git push origin
 
 # 3. Merge (pi has memory of job via session)
@@ -109,7 +109,7 @@ git push origin
 #fi
 
 # 5. Create PR (auto-merge handled by GitHub Actions workflow)
-gh pr create --title "thepopebot: job ${JOB_ID}" --body "Automated job" --base main || true
+gh pr create --title "cruciblebot: job ${JOB_ID}" --body "Automated job" --base main || true
 
 # Cleanup
 kill $CHROME_PID 2>/dev/null || true

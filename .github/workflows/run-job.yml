@@ -1,35 +1,61 @@
-name: Run CrucibleBot Job (local win10)
+name: Run CrucibleBot Job (self-hosted)
 
 on:
   create:
 
 jobs:
   run-agent:
+    # Requires a self-hosted runner on your Win10 machine (or any local machine)
+    # with Docker installed and running.
     runs-on: [self-hosted, windows]
     if: github.ref_type == 'branch' && startsWith(github.ref_name, 'job/')
     permissions:
       contents: write
       pull-requests: write
+      packages: read
 
     steps:
-      - name: Checkout job branch
-        uses: actions/checkout@v4
+      - name: Validate required configuration
+        shell: pwsh
+        run: |
+          if (-not "${{ vars.IMAGE_URL }}") { throw "Missing repo variable: IMAGE_URL (example: ghcr.io/dtc2002/cruciblebot)" }
+          if (-not "${{ secrets.SECRETS }}") { throw "Missing repo secret: SECRETS (base64 JSON must include GH_TOKEN)" }
+
+      - name: Login to GHCR (if needed)
+        # Only required for private GHCR images or rate-limit avoidance.
+        # Uses GitHub Actions token; ensure packages:read permission is granted (it is above).
+        uses: docker/login-action@v3
         with:
-          ref: ${{ github.ref_name }}
-          fetch-depth: 0
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Show context
+      - name: Run CrucibleBot Agent container
         shell: pwsh
+        env:
+          IMAGE_URL: ${{ vars.IMAGE_URL }}
+          MODEL: ${{ vars.MODEL }}
+          SECRETS: ${{ secrets.SECRETS }}
+          LLM_SECRETS: ${{ secrets.LLM_SECRETS }}
         run: |
-          Write-Host "Repo: $env:GITHUB_REPOSITORY"
-          Write-Host "Ref name: $env:GITHUB_REF_NAME"
-          git status
+          $image = "$env:IMAGE_URL`:latest"
+          Write-Host "Using image: $image"
 
-      # PROVE the runner can execute and push back to the job branch.
-      - name: Apply job (smoke test)
-        shell: pwsh
-        run: |
-          Set-Content -Path test.txt -Value "hello"
-          git add -A
-          git commit -m "cruciblebot: apply job $env:GITHUB_REF_NAME" || Write-Host "Nothing to commit"
-          git push origin HEAD
+          # Default model if not provided as a repo variable
+          if (-not $env:MODEL) { $env:MODEL = "qwen2.5-coder:14b" }
+
+          # Run the container. It will:
+          # - clone BRANCH from REPO_URL
+          # - run the agent
+          # - commit/push
+          # - open PR (if configured in entrypoint.sh)
+          docker run --rm `
+            -e REPO_URL="${{ github.server_url }}/${{ github.repository }}.git" `
+            -e BRANCH="${{ github.ref_name }}" `
+            -e SECRETS="$env:SECRETS" `
+            -e LLM_SECRETS="$env:LLM_SECRETS" `
+            -e PROVIDER="ollama" `
+            -e MODEL="$env:MODEL" `
+            -e OPENAI_BASE_URL="http://host.docker.internal:11434/v1" `
+            -e OPENAI_API_KEY="ollama" `
+            $image

@@ -2,7 +2,8 @@ const express = require('express');
 const helmet = require('helmet');
 const fs = require('fs');
 const path = require('path');
-require('dotenv').config();
+require('dotenv').config({ path: path.join(__dirname, '.env') });
+
 
 const { createJob } = require('./tools/create-job');
 const { loadCrons } = require('./cron');
