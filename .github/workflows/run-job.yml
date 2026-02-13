@@ -5,8 +5,6 @@ on:
 
 jobs:
   run-agent:
-    # Requires a self-hosted runner on your Win10 machine (or any local machine)
-    # with Docker installed and running.
     runs-on: [self-hosted, windows]
     if: github.ref_type == 'branch' && startsWith(github.ref_name, 'job/')
     permissions:
@@ -16,14 +14,18 @@ jobs:
 
     steps:
       - name: Validate required configuration
-        shell: pwsh
+        shell: powershell
+        env:
+          IMAGE_URL: ${{ vars.IMAGE_URL }}
+          SECRETS: ${{ secrets.SECRETS }}
         run: |
-          if (-not "${{ vars.IMAGE_URL }}") { throw "Missing repo variable: IMAGE_URL (example: ghcr.io/dtc2002/cruciblebot)" }
-          if (-not "${{ secrets.SECRETS }}") { throw "Missing repo secret: SECRETS (base64 JSON must include GH_TOKEN)" }
+          if (-not $env:IMAGE_URL) { throw "Missing repo variable: IMAGE_URL (example: ghcr.io/dtc2002/cruciblebot)" }
+          if (-not $env:SECRETS) { throw "Missing repo secret: SECRETS (base64 JSON must include GH_TOKEN)" }
+          Write-Host "IMAGE_URL present."
+          Write-Host "SECRETS present (length=$($env:SECRETS.Length))."
 
       - name: Login to GHCR (if needed)
         # Only required for private GHCR images or rate-limit avoidance.
-        # Uses GitHub Actions token; ensure packages:read permission is granted (it is above).
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -31,24 +33,18 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run CrucibleBot Agent container
-        shell: pwsh
+        shell: powershell
         env:
           IMAGE_URL: ${{ vars.IMAGE_URL }}
           MODEL: ${{ vars.MODEL }}
           SECRETS: ${{ secrets.SECRETS }}
           LLM_SECRETS: ${{ secrets.LLM_SECRETS }}
         run: |
-          $image = "$env:IMAGE_URL`:latest"
+          $image = "$($env:IMAGE_URL):latest"
           Write-Host "Using image: $image"
 
-          # Default model if not provided as a repo variable
           if (-not $env:MODEL) { $env:MODEL = "qwen2.5-coder:14b" }
 
-          # Run the container. It will:
-          # - clone BRANCH from REPO_URL
-          # - run the agent
-          # - commit/push
-          # - open PR (if configured in entrypoint.sh)
           docker run --rm `
             -e REPO_URL="${{ github.server_url }}/${{ github.repository }}.git" `
             -e BRANCH="${{ github.ref_name }}" `
