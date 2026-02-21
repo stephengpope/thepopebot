@@ -266,3 +266,70 @@ export async function promptText(message, defaultValue = '') {
   ]);
   return value;
 }
+/**
+ * Prompt for LLM provider selection
+ */
+export async function promptForProvider() {
+  const { provider } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'provider',
+      message: 'Choose your LLM provider for the event handler:',
+      choices: [
+        {
+          name: 'Claude (Anthropic) - Recommended',
+          value: 'claude',
+        },
+        {
+          name: 'GitHub Copilot',
+          value: 'copilot',
+        },
+      ],
+      default: 'claude',
+    },
+  ]);
+  return provider;
+}
+
+/**
+ * Prompt for GitHub Copilot API authentication
+ */
+export async function promptForGitHubCopilotKey() {
+  const { useToken } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'useToken',
+      message: 'Use GitHub token (already authenticated) or provide a Copilot-specific key?',
+      choices: [
+        {
+          name: 'Use existing GitHub token from gh CLI',
+          value: 'reuse',
+        },
+        {
+          name: 'Provide a new Copilot API key',
+          value: 'new',
+        },
+      ],
+      default: 'reuse',
+    },
+  ]);
+
+  if (useToken === 'reuse') {
+    // Signal that we should use the GH_TOKEN
+    return 'USE_GH_TOKEN';
+  }
+
+  const { key } = await inquirer.prompt([
+    {
+      type: 'password',
+      name: 'key',
+      message: 'Enter your GitHub Copilot API key:',
+      mask: '*',
+      validate: (input) => {
+        if (!input) return 'API key is required';
+        return true;
+      },
+    },
+  ]);
+  return key;
+}

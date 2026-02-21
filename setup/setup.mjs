@@ -16,6 +16,8 @@ import {
   promptForGroqKey,
   promptForBraveKey,
   promptForTelegramToken,
+  promptForProvider,
+  promptForGitHubCopilotKey,
   generateTelegramWebhookSecret,
   confirm,
   maskSecret,
@@ -75,12 +77,14 @@ function printInfo(message) {
 async function main() {
   printHeader();
 
-  const TOTAL_STEPS = 7;
+  const TOTAL_STEPS = 8;
   let currentStep = 0;
 
   // Collected values
   let pat = null;
+  let provider = null;
   let anthropicKey = null;
+  let copilotKey = null;
   let openaiKey = null;
   let groqKey = null;
   let braveKey = null;
@@ -228,41 +232,60 @@ async function main() {
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Step 3: API Keys
+  // Step 3: LLM Provider Selection
+  // ─────────────────────────────────────────────────────────────────────────────
+  printStep(++currentStep, TOTAL_STEPS, 'LLM Provider Selection');
+
+  provider = await promptForProvider();
+  printSuccess(`Selected provider: ${provider === 'claude' ? 'Claude (Anthropic)' : 'GitHub Copilot'}`);
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Step 4: API Keys
   // ─────────────────────────────────────────────────────────────────────────────
   printStep(++currentStep, TOTAL_STEPS, 'API Keys');
 
-  console.log(chalk.dim('  Anthropic API key is required. Others are optional.\n'));
+  if (provider === 'claude') {
+    // Claude requires Anthropic key
+    const openAnthropicPage = await confirm('Open Anthropic API key page in browser?');
+    if (openAnthropicPage) {
+      await open('https://platform.claude.com/settings/keys');
+      printInfo('Opened in browser. Create an API key and copy it.');
+    }
 
-  // Anthropic (required)
-  const openAnthropicPage = await confirm('Open Anthropic API key page in browser?');
-  if (openAnthropicPage) {
-    await open('https://platform.claude.com/settings/keys');
-    printInfo('Opened in browser. Create an API key and copy it.');
-  }
+    let anthropicValid = false;
+    while (!anthropicValid) {
+      anthropicKey = await promptForAnthropicKey();
 
-  let anthropicValid = false;
-  while (!anthropicValid) {
-    anthropicKey = await promptForAnthropicKey();
+      const validateSpinner = ora('Validating Anthropic API key...').start();
+      const validation = await validateAnthropicKey(anthropicKey);
 
-    const validateSpinner = ora('Validating Anthropic API key...').start();
-    const validation = await validateAnthropicKey(anthropicKey);
-
-    if (validation.valid) {
-      validateSpinner.succeed('Anthropic API key valid');
-      anthropicValid = true;
+      if (validation.valid) {
+        validateSpinner.succeed('Anthropic API key valid');
+        anthropicValid = true;
+      } else {
+        validateSpinner.fail(`Invalid key: ${validation.error}`);
+      }
+    }
+  } else if (provider === 'copilot') {
+    // Copilot can use GitHub token or dedicated API key
+    copilotKey = await promptForGitHubCopilotKey();
+    if (copilotKey === 'USE_GH_TOKEN') {
+      printSuccess('GitHub Copilot will use existing GitHub token (GH_TOKEN)');
+      copilotKey = null; // Don't need to set separately
     } else {
-      validateSpinner.fail(`Invalid key: ${validation.error}`);
+      printSuccess(`GitHub Copilot key added (${maskSecret(copilotKey)})`);
     }
   }
 
-  // OpenAI (optional)
+  console.log(chalk.dim('\n  Optional API keys:\n'));
+
+  // OpenAI (optional, for voice transcription)
   openaiKey = await promptForOpenAIKey();
   if (openaiKey) {
     printSuccess(`OpenAI key added (${maskSecret(openaiKey)})`);
   }
 
-  // Groq (optional)
+  // Groq (optional, not used by either provider currently but kept for future)
   groqKey = await promptForGroqKey();
   if (groqKey) {
     printSuccess(`Groq key added (${maskSecret(groqKey)})`);
@@ -297,7 +320,7 @@ async function main() {
   }
 
   webhookSecret = generateWebhookSecret();
-  const secretsBase64 = encodeSecretsBase64(pat, keys);
+  const secretsBase64 = encodeSecretsBase64(pat, keys, provider, copilotKey);
   const llmSecretsBase64 = encodeLlmSecretsBase64(keys);
 
   const secrets = {
@@ -383,6 +406,8 @@ async function main() {
     openaiApiKey: openaiKey,
     telegramChatId: null,
     telegramVerification,
+    provider,
+    copilotKey: copilotKey && copilotKey !== 'USE_GH_TOKEN' ? copilotKey : null,
   });
   printSuccess(`Created ${envPath}`);
 

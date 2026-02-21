@@ -44,8 +44,14 @@ export async function validateAnthropicKey(key) {
  * Build flat secrets JSON for SECRETS GitHub secret.
  * Includes GH_TOKEN + API keys. entrypoint.sh decodes and exports each as an env var.
  */
-export function buildSecretsJson(pat, keys) {
-  const secrets = { GH_TOKEN: pat, ANTHROPIC_API_KEY: keys.anthropic };
+export function buildSecretsJson(pat, keys, provider, copilotKey) {
+  const secrets = { GH_TOKEN: pat };
+
+  if (provider === 'claude' && keys.anthropic) {
+    secrets.ANTHROPIC_API_KEY = keys.anthropic;
+  } else if (provider === 'copilot' && copilotKey) {
+    secrets.GITHUB_COPILOT_API_KEY = copilotKey;
+  }
 
   if (keys.openai) secrets.OPENAI_API_KEY = keys.openai;
   if (keys.groq) secrets.GROQ_API_KEY = keys.groq;
@@ -56,8 +62,8 @@ export function buildSecretsJson(pat, keys) {
 /**
  * Encode secrets to base64 for SECRETS GitHub secret
  */
-export function encodeSecretsBase64(pat, keys) {
-  const secrets = buildSecretsJson(pat, keys);
+export function encodeSecretsBase64(pat, keys, provider, copilotKey) {
+  const secrets = buildSecretsJson(pat, keys, provider, copilotKey);
   return Buffer.from(JSON.stringify(secrets)).toString('base64');
 }
 
@@ -97,6 +103,8 @@ export function writeEnvFile(config) {
     openaiApiKey,
     telegramChatId,
     telegramVerification,
+    provider,
+    copilotKey,
   } = config;
 
   const envContent = `# Event Handler Configuration
@@ -104,6 +112,9 @@ export function writeEnvFile(config) {
 
 # Authentication key for /webhook endpoint
 API_KEY=${apiKey}
+
+# LLM Provider: claude or copilot
+EVENT_HANDLER_PROVIDER=${provider || 'claude'}
 
 # GitHub Personal Access Token (fine-grained: Actions, Contents, Metadata, Pull requests)
 GH_TOKEN=${githubToken}
@@ -128,7 +139,10 @@ TELEGRAM_VERIFICATION=${telegramVerification || ''}
 GH_WEBHOOK_SECRET=${ghWebhookSecret}
 
 # Anthropic API key for Claude chat features
-ANTHROPIC_API_KEY=${anthropicApiKey}
+ANTHROPIC_API_KEY=${anthropicApiKey || ''}
+
+# GitHub Copilot API key (if using Copilot provider)
+GITHUB_COPILOT_API_KEY=${copilotKey || ''}
 
 # OpenAI API key for Whisper voice transcription (optional)
 OPENAI_API_KEY=${openaiApiKey || ''}

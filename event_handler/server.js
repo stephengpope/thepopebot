@@ -9,11 +9,10 @@ const { loadCrons } = require('./cron');
 const { loadTriggers } = require('./triggers');
 const { setWebhook, sendMessage, formatJobNotification, downloadFile, reactToMessage, startTypingIndicator } = require('./tools/telegram');
 const { isWhisperEnabled, transcribeAudio } = require('./tools/openai');
-const { chat } = require('./claude');
+const { chat, getApiKey } = require('./llm/factory');
 const { toolDefinitions, toolExecutors } = require('./claude/tools');
 const { getHistory, updateHistory } = require('./claude/conversation');
 const { githubApi, getJobStatus } = require('./tools/github');
-const { getApiKey } = require('./claude');
 const { render_md } = require('./utils/render-md');
 
 const app = express();
@@ -188,7 +187,7 @@ function extractJobId(branchName) {
 }
 
 /**
- * Summarize a completed job using Claude — returns the raw message to send
+ * Summarize a completed job using the configured LLM provider
  * @param {Object} results - Job results from webhook payload
  * @param {string} results.job - Original task (job.md)
  * @param {string} results.commit_message - Final commit message
@@ -200,9 +199,6 @@ function extractJobId(branchName) {
  */
 async function summarizeJob(results) {
   try {
-    const apiKey = getApiKey();
-
-    // System prompt from JOB_SUMMARY.md (supports {{includes}})
     const systemPrompt = render_md(
       path.join(__dirname, '..', 'operating_system', 'JOB_SUMMARY.md')
     );
@@ -218,25 +214,9 @@ async function summarizeJob(results) {
       results.log ? `## Agent Log\n${results.log}` : '',
     ].filter(Boolean).join('\n\n');
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: process.env.EVENT_HANDLER_MODEL || 'claude-sonnet-4-20250514',
-        max_tokens: 1024,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userMessage }],
-      }),
-    });
-
-    if (!response.ok) throw new Error(`Claude API error: ${response.status}`);
-
-    const result = await response.json();
-    return (result.content?.[0]?.text || '').trim() || 'Job completed.';
+    // Use the factory's chat interface for provider-agnostic summarization
+    const { response } = await chat(userMessage, [{ role: 'system', content: systemPrompt }], [], {});
+    return response.trim() || 'Job completed.';
   } catch (err) {
     console.error('Failed to summarize job:', err);
     return 'Job completed.';
