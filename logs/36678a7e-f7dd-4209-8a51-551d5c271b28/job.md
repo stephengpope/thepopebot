@@ -1,0 +1,1 @@
+Use the web search skill to search for "Buenos Aires description" or "Buenos Aires overview". Extract a comprehensive description of the city including its key characteristics, culture, location, and notable features. Save the description as a markdown file at `docs/buenos-aires-description.md`.
