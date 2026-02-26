@@ -1,0 +1,14 @@
+{
+  "providers": {
+    "custom": {
+      "baseUrl": "http://host.docker.internal:11434/v1",
+      "apiKey": "CUSTOM_API_KEY",
+      "api": "openai-completions",
+      "models": [
+        {
+          "id": "llama3.1"
+        }
+      ]
+    }
+  }
+}

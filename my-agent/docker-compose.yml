@@ -1,0 +1,63 @@
+services:
+  traefik:
+    image: traefik:v3
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedByDefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      ## Uncomment the following lines to enable TLS via Let's Encrypt
+      ## (requires LETSENCRYPT_EMAIL in .env):
+      # - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      # - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      # - --certificatesresolvers.letsencrypt.acme.email=${LETSENCRYPT_EMAIL}
+      # - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      # - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_certs:/letsencrypt
+    restart: unless-stopped
+
+  event-handler:
+    container_name: thepopebot-event-handler
+    image: ${EVENT_HANDLER_IMAGE_URL:-stephengpope/thepopebot:event-handler-${THEPOPEBOT_VERSION:-latest}}
+    volumes:
+      - .:/app
+      - /app/node_modules
+    labels:
+      - traefik.enable=true
+      # Set APP_HOSTNAME in .env to the domain from APP_URL (e.g., mybot.example.com)
+      - traefik.http.routers.event-handler.rule=Host(`${APP_HOSTNAME}`)
+      - traefik.http.routers.event-handler.entrypoints=web
+      - traefik.http.services.event-handler.loadbalancer.server.port=80
+      ## Uncomment the following lines to enable TLS via Let's Encrypt:
+      # - traefik.http.routers.event-handler.entrypoints=websecure
+      # - traefik.http.routers.event-handler.tls.certresolver=letsencrypt
+    stop_grace_period: 120s
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/api/ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  runner:
+    image: myoung34/github-runner:latest
+    deploy:
+      replicas: ${RUNNER_REPLICAS:-2}
+    environment:
+      REPO_URL: https://github.com/${GH_OWNER}/${GH_REPO}
+      ACCESS_TOKEN: ${GH_TOKEN}
+      RUNNER_SCOPE: repo
+      LABELS: self-hosted
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/project:ro
+    restart: unless-stopped
+
+volumes:
+  traefik_certs:

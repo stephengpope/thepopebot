@@ -1,0 +1,64 @@
+name: Notify Job Failed
+
+on:
+  workflow_run:
+    workflows: ["Run thepopebot Job"]
+    types: [completed]
+
+jobs:
+  notify-failure:
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    if: >
+      github.event.workflow_run.conclusion != 'success' &&
+      startsWith(github.event.workflow_run.head_branch, 'job/')
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout job branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+
+      - name: Send failure notification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          JOB_ID="${BRANCH#job/}"
+          RUN_ID="${{ github.event.workflow_run.id }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${RUN_ID}"
+
+          # Read job.md (exists on branch from job creation)
+          JOB_CONTENT=""
+          if [ -f "logs/${JOB_ID}/job.md" ]; then
+            JOB_CONTENT=$(cat "logs/${JOB_ID}/job.md")
+          fi
+
+          COMMIT_SHA=$(git rev-parse HEAD)
+          STATUS="${{ github.event.workflow_run.conclusion }}"
+
+          jq -n \
+            --arg job_id "$JOB_ID" \
+            --arg branch "$BRANCH" \
+            --arg status "$STATUS" \
+            --arg job "$JOB_CONTENT" \
+            --arg run_url "$RUN_URL" \
+            --arg commit_sha "$COMMIT_SHA" \
+            '{
+              job_id: $job_id,
+              branch: $branch,
+              status: $status,
+              job: $job,
+              run_url: $run_url,
+              pr_url: "",
+              changed_files: [],
+              commit_message: "",
+              commit_sha: $commit_sha,
+              merge_result: ""
+            }' > /tmp/payload.json
+
+          curl -s -X POST "${{ vars.APP_URL }}/api/github/webhook" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Webhook-Secret-Token: ${{ secrets.GH_WEBHOOK_SECRET }}" \
+            -d @/tmp/payload.json

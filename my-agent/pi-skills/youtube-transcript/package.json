@@ -1,0 +1,8 @@
+{
+  "name": "youtube-transcript",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "youtube-transcript-plus": "^1.0.4"
+  }
+}

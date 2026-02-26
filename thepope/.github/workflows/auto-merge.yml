@@ -1,0 +1,117 @@
+name: Auto-Merge Job PR
+
+on:
+  pull_request:
+    types: [opened]
+    branches: [main]
+
+jobs:
+  auto-merge:
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    if: startsWith(github.event.pull_request.head.ref, 'job/')
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Wait for merge check
+        id: merge-check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          for i in $(seq 1 30); do
+            sleep 10
+            MERGEABLE=$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json mergeable -q '.mergeable')
+            if [ "$MERGEABLE" != "" ] && [ "$MERGEABLE" != "UNKNOWN" ]; then
+              echo "mergeable=$MERGEABLE" >> "$GITHUB_OUTPUT"
+              echo "Mergeable: $MERGEABLE"
+              exit 0
+            fi
+            echo "Still computing... (attempt $i/30)"
+          done
+          echo "mergeable=UNKNOWN" >> "$GITHUB_OUTPUT"
+          echo "Timed out waiting for merge check"
+
+      - name: Check AUTO_MERGE setting
+        if: steps.merge-check.outputs.mergeable == 'MERGEABLE'
+        id: check-setting
+        run: |
+          AUTO_MERGE="${{ vars.AUTO_MERGE }}"
+          if [ "$AUTO_MERGE" = "false" ]; then
+            echo "Auto-merge disabled via AUTO_MERGE=false"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Auto-merge enabled"
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check ALLOWED_PATHS
+        if: steps.merge-check.outputs.mergeable == 'MERGEABLE' && steps.check-setting.outputs.enabled == 'true'
+        id: check-paths
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ALLOWED_PATHS="${{ vars.ALLOWED_PATHS }}"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+
+          # Default: only logs allowed
+          if [ -z "$ALLOWED_PATHS" ]; then
+            ALLOWED_PATHS="/logs"
+          fi
+
+          # Normalize: ensure each prefix starts with /
+          IFS=',' read -ra RAW_PREFIXES <<< "$ALLOWED_PATHS"
+          PREFIXES=()
+          for p in "${RAW_PREFIXES[@]}"; do
+            trimmed=$(echo "$p" | xargs)
+            [ -z "$trimmed" ] && continue
+            # Ensure leading /
+            [[ "$trimmed" != /* ]] && trimmed="/$trimmed"
+            PREFIXES+=("$trimmed")
+          done
+
+          # "/" means everything allowed
+          for p in "${PREFIXES[@]}"; do
+            if [ "$p" = "/" ]; then
+              echo "All paths allowed (ALLOWED_PATHS contains /)"
+              echo "allowed=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+
+          # Get changed files
+          CHANGED_FILES=$(gh pr diff "$PR_NUMBER" --name-only --repo "${{ github.repository }}")
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "No changed files"
+            echo "allowed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Check each file against prefixes
+          # Strip leading / from prefixes for comparison (git paths are relative)
+          ALL_OK=true
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            FILE_OK=false
+            for prefix in "${PREFIXES[@]}"; do
+              compare="${prefix#/}"
+              if [[ "$file" == "$compare"* ]]; then
+                FILE_OK=true
+                break
+              fi
+            done
+            if [ "$FILE_OK" = "false" ]; then
+              echo "BLOCKED: $file"
+              ALL_OK=false
+            fi
+          done <<< "$CHANGED_FILES"
+
+          echo "allowed=$ALL_OK" >> "$GITHUB_OUTPUT"
+
+      - name: Merge PR
+        if: steps.merge-check.outputs.mergeable == 'MERGEABLE' && steps.check-setting.outputs.enabled == 'true' && steps.check-paths.outputs.allowed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr merge ${{ github.event.pull_request.number }} --squash --delete-branch --repo "${{ github.repository }}"

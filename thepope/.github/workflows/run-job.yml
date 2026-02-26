@@ -1,0 +1,83 @@
+name: Run thepopebot Job
+
+on:
+  create:
+
+jobs:
+  run-agent:
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    if: github.ref_type == 'branch' && startsWith(github.ref_name, 'job/')
+    permissions:
+      contents: write
+      packages: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          sparse-checkout: |
+            package-lock.json
+            logs/*/job.config.json
+          sparse-checkout-cone-mode: false
+
+      - name: Get thepopebot version
+        id: version
+        run: |
+          VERSION=$(jq -r '.packages["node_modules/thepopebot"].version // "latest"' package-lock.json)
+          echo "tag=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Read job config overrides
+        id: job-config
+        run: |
+          JOB_ID="${{ github.ref_name }}"
+          JOB_ID="${JOB_ID#job/}"
+          CONFIG_FILE="logs/${JOB_ID}/job.config.json"
+          if [ -f "$CONFIG_FILE" ]; then
+            echo "llm_provider=$(jq -r '.llm_provider // empty' "$CONFIG_FILE")" >> $GITHUB_OUTPUT
+            echo "llm_model=$(jq -r '.llm_model // empty' "$CONFIG_FILE")" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Login to GHCR
+        if: startsWith(vars.JOB_IMAGE_URL, 'ghcr.io/')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run thepopebot Agent
+        env:
+          ALL_SECRETS: ${{ toJson(secrets) }}
+          JOB_IMAGE_URL: ${{ vars.JOB_IMAGE_URL }}
+          THEPOPEBOT_VERSION: ${{ steps.version.outputs.tag }}
+          LLM_MODEL: ${{ steps.job-config.outputs.llm_model || vars.LLM_MODEL }}
+          LLM_PROVIDER: ${{ steps.job-config.outputs.llm_provider || vars.LLM_PROVIDER }}
+          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+        run: |
+          if [ -n "$JOB_IMAGE_URL" ]; then
+            IMAGE="${JOB_IMAGE_URL}:latest"
+          else
+            IMAGE="stephengpope/thepopebot:job-${THEPOPEBOT_VERSION}"
+          fi
+          echo "Using image: $IMAGE"
+
+          # Build SECRETS JSON from AGENT_* (excluding AGENT_LLM_*) secrets
+          export SECRETS=$(echo "$ALL_SECRETS" | jq -c '
+            [to_entries[] | select(.key | startswith("AGENT_")) | select(.key | startswith("AGENT_LLM_") | not)]
+            | map({key: (.key | sub("^AGENT_"; "")), value: .value}) | from_entries')
+
+          # Build LLM_SECRETS JSON from AGENT_LLM_* secrets
+          export LLM_SECRETS=$(echo "$ALL_SECRETS" | jq -c '
+            [to_entries[] | select(.key | startswith("AGENT_LLM_"))]
+            | map({key: (.key | sub("^AGENT_LLM_"; "")), value: .value}) | from_entries')
+
+          docker run --rm \
+            -e REPO_URL="${{ github.server_url }}/${{ github.repository }}.git" \
+            -e BRANCH="${{ github.ref_name }}" \
+            -e SECRETS \
+            -e LLM_SECRETS \
+            -e LLM_MODEL="${LLM_MODEL}" \
+            -e LLM_PROVIDER="${LLM_PROVIDER}" \
+            -e OPENAI_BASE_URL="${OPENAI_BASE_URL}" \
+            "$IMAGE"

@@ -1,0 +1,121 @@
+name: Rebuild Event Handler
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: event-handler-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    timeout-minutes: 20
+    steps:
+      - name: Pull latest and detect version change
+        id: pull
+        run: |
+          docker exec thepopebot-event-handler bash -c '
+            export GH_TOKEN=$(grep "^GH_TOKEN=" /app/.env | cut -d= -f2-)
+            echo "${GH_TOKEN}" | gh auth login --with-token
+            gh auth setup-git
+
+            git fetch origin main
+            CHANGED=$(git diff --name-only HEAD origin/main)
+            if ! echo "$CHANGED" | grep -qv "^logs/"; then
+              echo "SKIP" > /app/.rebuild-status
+              git reset --hard origin/main
+              exit 0
+            fi
+
+            # Detect thepopebot version change from package-lock.json in git
+            git show HEAD:package-lock.json > /tmp/old-lock.json 2>/dev/null || echo "{}" > /tmp/old-lock.json
+            git show origin/main:package-lock.json > /tmp/new-lock.json
+            OLD_TPB=$(node -p "try{require(\"/tmp/old-lock.json\").packages[\"node_modules/thepopebot\"]?.version||\"\"}catch(e){\"\"}")
+            NEW_TPB=$(node -p "try{require(\"/tmp/new-lock.json\").packages[\"node_modules/thepopebot\"]?.version||\"\"}catch(e){\"\"}")
+            rm -f /tmp/old-lock.json /tmp/new-lock.json
+
+            git reset --hard origin/main
+
+            if [ -n "$OLD_TPB" ] && [ "$OLD_TPB" != "$NEW_TPB" ]; then
+              # Version changed — run thepopebot init to scaffold new templates
+              if echo "$NEW_TPB" | grep -q "-"; then
+                npx --yes "thepopebot@${NEW_TPB}" init
+              else
+                npx --yes thepopebot@latest init
+              fi
+
+              # Commit any template changes from init
+              git add -A
+              if ! git diff --cached --quiet; then
+                git commit -m "chore: apply thepopebot init after upgrade"
+                git push origin main
+              fi
+
+              # Update THEPOPEBOT_VERSION in .env so docker compose pulls the right image
+              if grep -q "^THEPOPEBOT_VERSION=" /app/.env; then
+                sed -i "s/^THEPOPEBOT_VERSION=.*/THEPOPEBOT_VERSION=$NEW_TPB/" /app/.env
+              else
+                echo "THEPOPEBOT_VERSION=$NEW_TPB" >> /app/.env
+              fi
+              echo "VERSION_CHANGED" > /app/.rebuild-status
+            else
+              npm install --omit=dev
+              echo "REBUILD" > /app/.rebuild-status
+            fi
+          '
+
+          STATUS=$(docker exec thepopebot-event-handler cat /app/.rebuild-status)
+          docker exec thepopebot-event-handler rm -f /app/.rebuild-status
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+
+      - name: Rebuild (no version change)
+        if: steps.pull.outputs.status == 'REBUILD'
+        run: |
+          docker exec thepopebot-event-handler bash -c '
+            rm -rf .next-new .next-old
+            NEXT_BUILD_DIR=.next-new npm run build
+
+            mv .next .next-old 2>/dev/null || true
+            mv .next-new .next
+
+            echo "Rebuild complete, reloading Next.js..."
+            npx pm2 reload all
+
+            rm -rf .next-old
+          '
+
+      - name: Pull new image and restart container
+        if: steps.pull.outputs.status == 'VERSION_CHANGED'
+        run: |
+          HOST_DIR=$(docker inspect thepopebot-event-handler --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}')
+          docker compose -f /project/docker-compose.yml --project-directory "$HOST_DIR" --env-file /project/.env pull event-handler
+          docker stop thepopebot-event-handler || true
+          docker rm thepopebot-event-handler || true
+          docker compose -f /project/docker-compose.yml --project-directory "$HOST_DIR" --env-file /project/.env up -d event-handler
+
+      - name: Rebuild in new container
+        if: steps.pull.outputs.status == 'VERSION_CHANGED'
+        run: |
+          echo "Waiting for new container..."
+          for i in $(seq 1 30); do
+            if docker exec thepopebot-event-handler echo "ready" 2>/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+
+          docker exec thepopebot-event-handler bash -c '
+            npm install --omit=dev
+
+            rm -rf .next-new .next-old
+            NEXT_BUILD_DIR=.next-new npm run build
+
+            mv .next .next-old 2>/dev/null || true
+            mv .next-new .next
+
+            npx pm2 restart all
+
+            rm -rf .next-old
+          '

@@ -1,0 +1,56 @@
+[
+  {
+    "name": "heartbeat",
+    "schedule": "*/30 * * * *",
+    "type": "agent",
+    "job": "Read the file at config/HEARTBEAT.md and complete the tasks described there.",
+    "enabled": false
+  },
+  {
+    "name": "daily-check",
+    "schedule": "0 9 * * *",
+    "type": "agent",
+    "job": "Check for dependency updates in package.json and report any outdated packages.",
+    "enabled": false
+  },
+  {
+    "name": "ping",
+    "schedule": "*/1 * * * *",
+    "type": "command",
+    "command": "echo \"pong!\"",
+    "enabled": true
+  },
+  {
+    "name": "cleanup-logs",
+    "schedule": "0 0 * * 0",
+    "type": "command",
+    "command": "ls -la logs/",
+    "enabled": false
+  },
+  {
+    "name": "ping-status",
+    "schedule": "*/5 * * * *",
+    "type": "webhook",
+    "url": "https://example.com/status",
+    "method": "POST",
+    "vars": { "source": "heartbeat" },
+    "enabled": false
+  },
+  {
+    "name": "health-check",
+    "schedule": "*/10 * * * *",
+    "type": "webhook",
+    "url": "https://example.com/health",
+    "method": "GET",
+    "enabled": false
+  },
+  {
+    "name": "daily-check-openai",
+    "schedule": "0 9 * * *",
+    "type": "agent",
+    "job": "Check for dependency updates in package.json and report any outdated packages.",
+    "llm_provider": "openai",
+    "llm_model": "gpt-4o",
+    "enabled": false
+  }
+]

@@ -1,0 +1,5 @@
+{
+  "name": "env-sanitizer",
+  "private": true,
+  "type": "module"
+}

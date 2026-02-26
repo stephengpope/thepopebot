@@ -1,0 +1,62 @@
+name: Upgrade Event Handler
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_version:
+        description: 'Target version to install (empty for latest stable)'
+        required: false
+        default: ''
+
+concurrency:
+  group: event-handler-deploy
+  cancel-in-progress: false
+
+jobs:
+  upgrade:
+    runs-on: self-hosted
+    timeout-minutes: 20
+    steps:
+      - name: Upgrade thepopebot
+        run: |
+          docker exec thepopebot-event-handler bash -c '
+            export GH_TOKEN=$(grep "^GH_TOKEN=" /app/.env | cut -d= -f2-)
+            echo "${GH_TOKEN}" | gh auth login --with-token
+            gh auth setup-git
+
+            REPO_URL=$(git -C /app remote get-url origin)
+            WORK_DIR=$(mktemp -d)
+            git clone --depth 1 "$REPO_URL" "$WORK_DIR"
+            cd "$WORK_DIR"
+
+            git config user.name "thepopebot"
+            git config user.email "thepopebot@users.noreply.github.com"
+
+            npm install --omit=dev
+            OLD_VERSION=$(node -p "require(\"./node_modules/thepopebot/package.json\").version")
+
+            TARGET="${{ github.event.inputs.target_version }}"
+            if [ -n "$TARGET" ] && echo "$TARGET" | grep -q "-"; then
+              # Beta: npm update cannot upgrade an exact-pinned dependency, must use install
+              npm install "thepopebot@${TARGET}" --prefer-online
+            else
+              # Stable: npm update resolves to latest within semver range
+              npm update thepopebot --prefer-online
+            fi
+
+            NEW_VERSION=$(node -p "require(\"./node_modules/thepopebot/package.json\").version")
+
+            if [ "$OLD_VERSION" != "$NEW_VERSION" ]; then
+              BRANCH="upgrade/thepopebot-${NEW_VERSION}-$(date +%s)"
+              git add -A
+              git checkout -b "$BRANCH"
+              git commit -m "chore: upgrade thepopebot to $NEW_VERSION"
+              git push origin "$BRANCH"
+              gh pr create --title "chore: upgrade thepopebot" --body "Automated upgrade via upgrade-event-handler workflow." --base main --head "$BRANCH"
+              gh pr merge "$BRANCH" --squash --auto --delete-branch
+            else
+              echo "No changes — thepopebot is already up to date."
+            fi
+
+            rm -rf "$WORK_DIR"
+          '

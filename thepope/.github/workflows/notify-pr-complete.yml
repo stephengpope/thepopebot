@@ -1,0 +1,119 @@
+name: Notify Event Handler
+
+on:
+  workflow_run:
+    workflows: ["Auto-Merge Job PR"]
+    types: [completed]
+
+jobs:
+  notify:
+    runs-on: ${{ vars.RUNS_ON || 'ubuntu-latest' }}
+    if: startsWith(github.event.workflow_run.head_branch, 'job/')
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Get PR number
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
+
+          # Try workflow_run.pull_requests first
+          PR_NUMBER=$(echo '${{ toJson(github.event.workflow_run.pull_requests) }}' | jq -r '.[0].number // empty')
+
+          # Fallback: look up PR by head branch
+          if [ -z "$PR_NUMBER" ]; then
+            PR_NUMBER=$(gh pr list --head "$BRANCH" --state all --repo "${{ github.repository }}" --json number -q '.[0].number')
+          fi
+
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No PR found for branch $BRANCH"
+            exit 1
+          fi
+
+          PR_URL=$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json url -q '.url')
+
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
+          echo "Found PR #$PR_NUMBER"
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Gather job results and notify
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER="${{ steps.pr.outputs.number }}"
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          JOB_ID="${BRANCH#job/}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}"
+
+          # Check actual PR merge state
+          PR_MERGED=$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json mergedAt -q '.mergedAt')
+          if [ -n "$PR_MERGED" ] && [ "$PR_MERGED" != "null" ]; then
+            MERGE_RESULT="merged"
+          else
+            MERGE_RESULT="not_merged"
+          fi
+
+          # 1. Read job.md (on disk after checkout)
+          JOB_CONTENT=""
+          if [ -f "logs/${JOB_ID}/job.md" ]; then
+            JOB_CONTENT=$(cat "logs/${JOB_ID}/job.md")
+          fi
+
+          # 2. Get last commit message via gh CLI
+          COMMIT_MSG=$(gh pr view "$PR_NUMBER" --json commits --jq '.commits[-1].messageHeadline' --repo "${{ github.repository }}" 2>/dev/null || echo "")
+
+          # 3. Get changed files (names only)
+          CHANGED_FILES=$(gh pr diff "$PR_NUMBER" --name-only --repo "${{ github.repository }}" 2>/dev/null || echo "")
+
+          # 4. Get PR status
+          PR_STATUS=$(gh pr view "$PR_NUMBER" --json state --jq '.state' --repo "${{ github.repository }}" 2>/dev/null || echo "open")
+
+          # 5. Commit SHA for server-side log fetching
+          COMMIT_SHA="${{ github.event.workflow_run.head_sha }}"
+
+          # Determine status based on merge result and PR state
+          if [ "$MERGE_RESULT" = "merged" ]; then
+            STATUS="completed"
+          else
+            STATUS="$PR_STATUS"
+          fi
+
+          # 6. Build flat JSON payload
+          jq -n \
+            --arg job_id "$JOB_ID" \
+            --arg branch "$BRANCH" \
+            --arg status "$STATUS" \
+            --arg job "$JOB_CONTENT" \
+            --arg run_url "$RUN_URL" \
+            --arg pr_url "${{ steps.pr.outputs.url }}" \
+            --arg commit_message "$COMMIT_MSG" \
+            --arg changed_files "$CHANGED_FILES" \
+            --arg commit_sha "$COMMIT_SHA" \
+            --arg merge_result "$MERGE_RESULT" \
+            '{
+              job_id: $job_id,
+              branch: $branch,
+              status: $status,
+              job: $job,
+              run_url: $run_url,
+              pr_url: $pr_url,
+              changed_files: ($changed_files | split("\n") | map(select(length > 0))),
+              commit_message: $commit_message,
+              commit_sha: $commit_sha,
+              merge_result: $merge_result
+            }' > /tmp/payload.json
+
+          # 7. Send to event handler
+          curl -s -X POST "${{ vars.APP_URL }}/api/github/webhook" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Webhook-Secret-Token: ${{ secrets.GH_WEBHOOK_SECRET }}" \
+            -d @/tmp/payload.json
