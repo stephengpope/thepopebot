@@ -5,11 +5,26 @@ import { ghEnv } from './prerequisites.mjs';
 
 const execAsync = promisify(exec);
 
+const isGiteaBackend = () => process.env.GH_WRAPPER_BACKEND === 'gitea';
+const giteaUrl = () => (process.env.GITEA_URL || '').replace(/\/$/, '');
+
 /**
- * Validate GitHub PAT by making a test API call
+ * Validate a token by making a test API call.
+ * Works for both GitHub (PAT) and Gitea (access token) depending on GH_WRAPPER_BACKEND.
  */
 export async function validatePAT(token) {
   try {
+    if (isGiteaBackend()) {
+      const base = giteaUrl();
+      if (!base) return { valid: false, error: 'GITEA_URL is not set' };
+      const response = await fetch(`${base}/api/v1/user`, {
+        headers: { Authorization: `token ${token}` },
+      });
+      if (!response.ok) return { valid: false, error: 'Invalid token' };
+      const user = await response.json();
+      return { valid: true, user: user.login };
+    }
+    // GitHub default
     const response = await fetch('https://api.github.com/user', {
       headers: {
         Authorization: `token ${token}`,
@@ -25,11 +40,21 @@ export async function validatePAT(token) {
 }
 
 /**
- * Check PAT scopes/permissions
- * Works with both classic tokens (x-oauth-scopes header) and fine-grained tokens
+ * Check token scopes/permissions.
+ * For Gitea, tokens have full access by default; returns hasRepo/hasWorkflow=true.
  */
 export async function checkPATScopes(token) {
   try {
+    if (isGiteaBackend()) {
+      // Gitea tokens don't expose OAuth scopes; assume full access if the token is valid
+      const base = giteaUrl();
+      const response = await fetch(`${base}/api/v1/user`, {
+        headers: { Authorization: `token ${token}` },
+      });
+      if (!response.ok) return { hasRepo: false, hasWorkflow: false, scopes: [], isFineGrained: false };
+      return { hasRepo: true, hasWorkflow: true, scopes: [], isFineGrained: true };
+    }
+    // GitHub default
     const response = await fetch('https://api.github.com/user', {
       headers: {
         Authorization: `token ${token}`,
@@ -142,8 +167,14 @@ export function generateWebhookSecret() {
 }
 
 /**
- * Get the GitHub PAT creation URL with pre-selected scopes
+ * Get the token creation URL.
+ * For Gitea, returns the user settings/applications page.
+ * For GitHub, returns the PAT creation page with pre-selected scopes.
  */
 export function getPATCreationURL() {
+  if (process.env.GH_WRAPPER_BACKEND === 'gitea') {
+    const base = (process.env.GITEA_URL || '').replace(/\/$/, '');
+    return base ? `${base}/user/settings/applications` : '';
+  }
   return 'https://github.com/settings/personal-access-tokens/new';
 }

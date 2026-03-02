@@ -4,14 +4,21 @@ import { promisify } from 'util';
 const execAsync = promisify(exec);
 
 /**
- * Return process.env without GITHUB_TOKEN and GH_TOKEN.
- * The gh CLI auto-uses these env vars, which can shadow interactive login
- * and cause secret/variable operations to fail with the wrong identity.
+ * Return process.env suitable for invoking the gh CLI (or gh-wrapper shim).
+ *
+ * GitHub mode: strips GITHUB_TOKEN and GH_TOKEN so the real gh CLI uses the
+ * interactive session rather than the ambient token.
+ *
+ * Gitea mode: strips only GITHUB_TOKEN (which would confuse the shim) but
+ * keeps GH_TOKEN — the shim uses it as the Gitea API token when
+ * GITEA_TOKEN is not explicitly set.
  */
 export function ghEnv() {
   const env = { ...process.env };
   delete env.GITHUB_TOKEN;
-  delete env.GH_TOKEN;
+  if (process.env.GH_WRAPPER_BACKEND !== 'gitea') {
+    delete env.GH_TOKEN;
+  }
   return env;
 }
 
@@ -53,20 +60,18 @@ async function isGhAuthenticated() {
 }
 
 /**
- * Get git remote info (owner/repo)
+ * Get git remote info (owner/repo).
+ * Works with GitHub remotes (github.com) and Gitea remotes (any host).
  */
 function getGitRemoteInfo() {
   try {
     const remote = execSync('git remote get-url origin', { encoding: 'utf-8' }).trim();
-    // Handle both HTTPS and SSH formats
-    // https://github.com/owner/repo.git
-    // git@github.com:owner/repo.git
-    const httpsMatch = remote.match(/github\.com\/([^/]+)\/(.+?)(?:\.git)?$/);
-    const sshMatch = remote.match(/github\.com:([^/]+)\/(.+?)(?:\.git)?$/);
-    const match = httpsMatch || sshMatch;
-    if (match) {
-      return { owner: match[1], repo: match[2] };
-    }
+    // HTTPS: https://host/owner/repo.git
+    const httpsMatch = remote.match(/https?:\/\/[^/]+\/([^/]+)\/(.+?)(?:\.git)?$/);
+    if (httpsMatch) return { owner: httpsMatch[1], repo: httpsMatch[2] };
+    // SSH: git@host:owner/repo.git
+    const sshMatch = remote.match(/@[^:]+:([^/]+)\/(.+?)(?:\.git)?$/);
+    if (sshMatch) return { owner: sshMatch[1], repo: sshMatch[2] };
     return null;
   } catch {
     return null;

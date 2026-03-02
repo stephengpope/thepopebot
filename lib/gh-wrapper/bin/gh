@@ -1,0 +1,22 @@
+#!/usr/bin/env node
+'use strict';
+
+const path = require('path');
+const config = require('../lib/config.js');
+
+async function main() {
+  const args = process.argv.slice(2);
+
+  if (config.backend === 'gitea') {
+    const gitea = require('../lib/backends/gitea.js');
+    await gitea.run(args);
+  } else {
+    const github = require('../lib/backends/github.js');
+    github.run(args);
+  }
+}
+
+main().catch(err => {
+  process.stderr.write(`gh-wrapper: ${err.message}\n`);
+  process.exit(1);
+});
