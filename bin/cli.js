@@ -6,6 +6,24 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createDirLink } from '../setup/lib/fs-utils.mjs';
 
+/**
+ * Return true when `filePath` is a plain text file whose content exactly
+ * matches `expectedTarget`.  This is the artifact produced by Windows git
+ * (core.symlinks=false) when it checks out a mode-120000 symlink entry: the
+ * blob content (e.g. "../skills/active") is written as a regular file instead
+ * of creating an OS symlink.  Detecting this lets init() replace the text file
+ * with a real symlink rather than silently skipping symlink creation.
+ */
+function isTextFileSymlink(filePath, expectedTarget) {
+  try {
+    const stat = fs.lstatSync(filePath);
+    if (!stat.isFile()) return false; // directory, real symlink, etc.
+    return fs.readFileSync(filePath, 'utf8').trim() === expectedTarget;
+  } catch {
+    return false;
+  }
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -218,20 +236,35 @@ async function init() {
     }
   }
 
-  // Create default skill activation symlinks
+  // Create default skill activation symlinks.
+  // On Windows (git core.symlinks=false) the template symlinks land as plain
+  // text files whose content is the symlink target.  fs.existsSync() returns
+  // true for those files, which previously caused the symlink creation to be
+  // skipped silently — leaving the project without working symlinks and causing
+  // the Docker agent to crash at runtime.  isTextFileSymlink() detects this
+  // artifact and removes the text file so a real symlink can be created.
   const defaultSkills = ['browser-tools', 'llm-secrets', 'modify-self'];
   const activeDir = path.join(cwd, 'skills', 'active');
   fs.mkdirSync(activeDir, { recursive: true });
   for (const skill of defaultSkills) {
     const symlink = path.join(activeDir, skill);
+    const target = `../${skill}`;
+    if (isTextFileSymlink(symlink, target)) {
+      fs.unlinkSync(symlink);
+      console.log(`  Removed text-file artifact: skills/active/${skill}`);
+    }
     if (!fs.existsSync(symlink)) {
-      createDirLink(`../${skill}`, symlink);
-      console.log(`  Created skills/active/${skill} → ../${skill}`);
+      createDirLink(target, symlink);
+      console.log(`  Created skills/active/${skill} → ${target}`);
     }
   }
 
   // Create .pi/skills → ../skills/active symlink
   const piSkillsLink = path.join(cwd, '.pi', 'skills');
+  if (isTextFileSymlink(piSkillsLink, '../skills/active')) {
+    fs.unlinkSync(piSkillsLink);
+    console.log('  Removed text-file artifact: .pi/skills');
+  }
   if (!fs.existsSync(piSkillsLink)) {
     fs.mkdirSync(path.dirname(piSkillsLink), { recursive: true });
     createDirLink('../skills/active', piSkillsLink);
@@ -240,6 +273,10 @@ async function init() {
 
   // Create .claude/skills → ../skills/active symlink
   const claudeSkillsLink = path.join(cwd, '.claude', 'skills');
+  if (isTextFileSymlink(claudeSkillsLink, '../skills/active')) {
+    fs.unlinkSync(claudeSkillsLink);
+    console.log('  Removed text-file artifact: .claude/skills');
+  }
   if (!fs.existsSync(claudeSkillsLink)) {
     fs.mkdirSync(path.dirname(claudeSkillsLink), { recursive: true });
     createDirLink('../skills/active', claudeSkillsLink);
