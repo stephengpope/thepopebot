@@ -45,7 +45,8 @@
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio",
     "docker:build": "node bin/docker-build.js",
-    "test": "echo \"No tests yet\" && exit 0",
+    "test": "node --test lib/gh-wrapper/test/args.test.js lib/gh-wrapper/test/jq-lite.test.js",
+    "test": "node --test lib/gh-wrapper/test/args.test.js lib/gh-wrapper/test/jq-lite.test.js",
     "sync": "node bin/cli.js sync"
   },
   "keywords": [
