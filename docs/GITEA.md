@@ -76,16 +76,22 @@ gh api repos/owner/repo --jq 'to_entries | .[] | .key'
 
 ## Known issues
 
-### Underscore parameters in Gitea 1.25 (current)
+### Underscore parameters in Gitea 1.25
 
-Gitea 1.25 has a bug where certain API endpoints reject or silently ignore body fields whose names contain underscores (e.g. `delete_branch_after_merge`, `target_commitish`). This affects:
+Gitea 1.25 has a bug where certain API endpoints silently ignore body fields whose names contain underscores (e.g. `delete_branch_after_merge`, `target_commitish`).
 
-- `gh pr merge --delete-branch` — the branch may not be deleted after merge even if the flag is passed.
-- `gh release create` with an explicit `--target` / `--target-commitish` — the target commit may be ignored and the release will be created from the default branch instead.
+**The shim detects this automatically.** On the first command that needs it, it calls `GET /api/v1/version` and caches the result. If the server is running 1.25.x, it applies workarounds transparently:
 
-**Workaround**: After merging, delete the branch manually with `git push origin --delete <branch>`. For releases, ensure the tag points to the correct commit before running `gh release create`.
+- `gh pr merge --delete-branch` — the shim omits `delete_branch_after_merge` from the merge body, then makes a separate `DELETE /repos/{owner}/{repo}/branches/{branch}` call after a successful merge.
+- `gh release create --target <commitish>` — the shim omits `target_commitish` from the release body and prints a warning to stderr. **Ensure the tag already points to the correct commit before running this command.**
 
-This is tracked upstream: https://github.com/go-gitea/gitea/issues — watch for a fix in 1.25.x patch releases or 1.26.
+You can also force the workaround without a version check by setting:
+
+```sh
+GITEA_QUIRKS=underscore  # or GITEA_QUIRKS=1.25
+```
+
+This is useful in CI environments where the version endpoint is unavailable, or as a quick opt-in before upgrading.
 
 ### `gh pr merge --auto`
 
