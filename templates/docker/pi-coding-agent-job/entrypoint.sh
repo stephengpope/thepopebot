@@ -38,6 +38,49 @@ fi
 
 cd /job
 
+# ── Repair skills directory structure ────────────────────────────────────────
+# On Windows hosts, git stores symlinks as plain text files containing the
+# target path (e.g. ".pi/skills" contains "../skills/active" as text).
+# This causes the Pi agent to crash when it tries to create skill symlinks
+# inside what it expects to be a directory. Detect and repair these artifacts
+# so skills are always discoverable regardless of the host OS that committed them.
+repair_dir_symlink() {
+    local link_path="$1"
+    local expected_target="$2"
+    if [ -f "$link_path" ] && [ ! -L "$link_path" ]; then
+        # Text file containing the symlink target — Windows git artifact
+        local stored
+        stored=$(cat "$link_path")
+        if [ "$stored" = "$expected_target" ]; then
+            rm "$link_path"
+            ln -sf "$expected_target" "$link_path"
+            echo "  Repaired symlink (was text file): $link_path → $expected_target"
+        fi
+    elif [ ! -e "$link_path" ] && [ ! -L "$link_path" ]; then
+        # Symlink is missing entirely — create it
+        mkdir -p "$(dirname "$link_path")"
+        ln -sf "$expected_target" "$link_path"
+        echo "  Created missing symlink: $link_path → $expected_target"
+    fi
+    # If it's already a valid symlink, leave it untouched
+}
+
+mkdir -p /job/skills/active
+repair_dir_symlink /job/.pi/skills     ../skills/active
+repair_dir_symlink /job/.claude/skills ../skills/active
+for skill in browser-tools llm-secrets modify-self; do
+    [ -d "/job/skills/$skill" ] && repair_dir_symlink "/job/skills/active/$skill" "../$skill"
+done
+
+# Auto-activate brave-search when BRAVE_API_KEY is present but the skill symlink
+# is missing. BRAVE_API_KEY reaches the container via the AGENT_BRAVE_API_KEY
+# GitHub secret (stripped to BRAVE_API_KEY by the SECRETS eval loop above).
+if [ -n "$BRAVE_API_KEY" ] && [ -d "/job/skills/brave-search" ] && [ ! -e "/job/skills/active/brave-search" ]; then
+    ln -sf ../brave-search /job/skills/active/brave-search
+    echo "  Auto-activated brave-search skill (BRAVE_API_KEY is set)"
+fi
+# ─────────────────────────────────────────────────────────────────────────────
+
 # Install npm deps for active skills (native deps need correct Linux arch)
 for skill_dir in /job/skills/active/*/; do
     if [ -f "${skill_dir}package.json" ]; then
