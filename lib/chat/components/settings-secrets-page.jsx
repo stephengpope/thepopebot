@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { KeyIcon, CopyIcon, CheckIcon, TrashIcon, RefreshIcon } from './icons.js';
+import { useState, useEffect, useRef } from 'react';
+import { KeyIcon, CopyIcon, CheckIcon, TrashIcon } from './icons.js';
 import { createNewApiKey, getApiKeys, deleteApiKey } from '../actions.js';
 
 function timeAgo(ts) {
@@ -75,76 +75,99 @@ function Section({ title, description, children }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// API Key section
+// API Keys section
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ApiKeySection() {
-  const [currentKey, setCurrentKey] = useState(null);
+  const [keys, setKeys] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+  const [formError, setFormError] = useState(null);
   const [creating, setCreating] = useState(false);
   const [newKey, setNewKey] = useState(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [confirmRegenerate, setConfirmRegenerate] = useState(false);
-  const [error, setError] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const confirmTimerRef = useRef(null);
+  const nameInputRef = useRef(null);
 
-  const loadKey = async () => {
+  const loadKeys = async () => {
     try {
       const result = await getApiKeys();
-      setCurrentKey(result);
+      setKeys(Array.isArray(result) ? result : []);
     } catch {
-      // ignore
+      setKeys([]);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadKey();
+    loadKeys();
   }, []);
 
-  const handleCreate = async () => {
+  // Auto-focus name input when form opens
+  useEffect(() => {
+    if (showForm && nameInputRef.current) {
+      nameInputRef.current.focus();
+    }
+  }, [showForm]);
+
+  const handleOpenForm = () => {
+    setShowForm(true);
+    setNameInput('');
+    setFormError(null);
+  };
+
+  const handleCancelForm = () => {
+    setShowForm(false);
+    setNameInput('');
+    setFormError(null);
+  };
+
+  const handleCreate = async (e) => {
+    e.preventDefault();
     if (creating) return;
+    const trimmed = nameInput.trim();
+    if (!trimmed) {
+      setFormError('Name is required');
+      return;
+    }
     setCreating(true);
-    setError(null);
-    setConfirmRegenerate(false);
+    setFormError(null);
     try {
-      const result = await createNewApiKey();
+      const result = await createNewApiKey(trimmed);
       if (result.error) {
-        setError(result.error);
+        setFormError(result.error);
       } else {
         setNewKey(result.key);
-        await loadKey();
+        setShowForm(false);
+        setNameInput('');
+        await loadKeys();
       }
     } catch {
-      setError('Failed to create API key');
+      setFormError('Failed to create API key');
     } finally {
       setCreating(false);
     }
   };
 
-  const handleDelete = async () => {
-    if (!confirmDelete) {
-      setConfirmDelete(true);
-      setTimeout(() => setConfirmDelete(false), 3000);
+  const handleDelete = async (id) => {
+    if (confirmDeleteId !== id) {
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+      setConfirmDeleteId(id);
+      confirmTimerRef.current = setTimeout(() => setConfirmDeleteId(null), 3000);
       return;
     }
+    setConfirmDeleteId(null);
     try {
-      await deleteApiKey();
-      setCurrentKey(null);
-      setNewKey(null);
-      setConfirmDelete(false);
+      await deleteApiKey(id);
+      setKeys((prev) => prev.filter((k) => k.id !== id));
+      if (newKey && keys.find((k) => k.id === id)) {
+        setNewKey(null);
+      }
     } catch {
       // ignore
     }
-  };
-
-  const handleRegenerate = () => {
-    if (!confirmRegenerate) {
-      setConfirmRegenerate(true);
-      setTimeout(() => setConfirmRegenerate(false), 3000);
-      return;
-    }
-    handleCreate();
   };
 
   if (loading) {
@@ -153,8 +176,56 @@ function ApiKeySection() {
 
   return (
     <div>
-      {error && (
-        <p className="text-sm text-destructive mb-4">{error}</p>
+      {/* Header row: section action button */}
+      <div className="flex justify-end mb-3">
+        <button
+          onClick={handleOpenForm}
+          disabled={showForm}
+          className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium border border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 disabled:pointer-events-none"
+        >
+          + Add API key
+        </button>
+      </div>
+
+      {/* Inline create form */}
+      {showForm && (
+        <form
+          onSubmit={handleCreate}
+          className="rounded-lg border bg-card p-4 mb-3"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+            <div className="flex-1">
+              <input
+                ref={nameInputRef}
+                type="text"
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                placeholder="e.g. production"
+                maxLength={64}
+                className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              {formError && (
+                <p className="mt-1.5 text-xs text-destructive">{formError}</p>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="submit"
+                disabled={creating || !nameInput.trim()}
+                className="inline-flex items-center rounded-md px-3 py-1.5 text-sm font-medium bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 disabled:pointer-events-none"
+              >
+                {creating ? 'Creating...' : 'Create'}
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelForm}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </form>
       )}
 
       {/* New key banner */}
@@ -180,60 +251,50 @@ function ApiKeySection() {
         </div>
       )}
 
-      {currentKey ? (
-        <div className="rounded-lg border bg-card p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="shrink-0 rounded-md bg-muted p-2">
-                <KeyIcon size={16} />
+      {/* Key list */}
+      {keys.length > 0 ? (
+        <div className="rounded-lg border bg-card divide-y divide-border">
+          {keys.map((apiKey) => (
+            <div
+              key={apiKey.id}
+              className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="flex items-center gap-3">
+                <div className="shrink-0 rounded-md bg-muted p-2">
+                  <KeyIcon size={16} />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">{apiKey.name}</p>
+                  <div className="flex flex-wrap items-center gap-x-2 mt-0.5">
+                    <code className="text-xs font-mono text-muted-foreground truncate max-w-[160px]">
+                      {apiKey.keyPrefix}...
+                    </code>
+                    <span className="text-xs text-muted-foreground">
+                      Created {formatDate(apiKey.createdAt)}
+                      {apiKey.lastUsedAt
+                        ? ` · Last used ${timeAgo(apiKey.lastUsedAt)}`
+                        : ' · Never used'}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div>
-                <code className="text-sm font-mono">{currentKey.keyPrefix}...</code>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Created {formatDate(currentKey.createdAt)}
-                  {currentKey.lastUsedAt && (
-                    <span className="ml-2">· Last used {timeAgo(currentKey.lastUsedAt)}</span>
-                  )}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
               <button
-                onClick={handleRegenerate}
-                disabled={creating}
-                className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium border ${
-                  confirmRegenerate
-                    ? 'border-yellow-500 text-yellow-600 hover:bg-yellow-500/10'
-                    : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground'
-                } disabled:opacity-50`}
-              >
-                <RefreshIcon size={12} />
-                {creating ? 'Generating...' : confirmRegenerate ? 'Confirm regenerate' : 'Regenerate'}
-              </button>
-              <button
-                onClick={handleDelete}
-                className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium border ${
-                  confirmDelete
+                onClick={() => handleDelete(apiKey.id)}
+                className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium border min-h-[32px] min-w-[64px] shrink-0 ${
+                  confirmDeleteId === apiKey.id
                     ? 'border-destructive text-destructive hover:bg-destructive/10'
                     : 'border-border text-muted-foreground hover:text-destructive hover:border-destructive/50'
                 }`}
               >
                 <TrashIcon size={12} />
-                {confirmDelete ? 'Confirm delete' : 'Delete'}
+                {confirmDeleteId === apiKey.id ? 'Confirm delete' : 'Delete'}
               </button>
             </div>
-          </div>
+          ))}
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed bg-card p-6 flex flex-col items-center text-center">
-          <p className="text-sm text-muted-foreground mb-3">No API key configured</p>
-          <button
-            onClick={handleCreate}
-            disabled={creating}
-            className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 disabled:pointer-events-none"
-          >
-            {creating ? 'Creating...' : 'Create API key'}
-          </button>
+        <div className="rounded-lg border border-dashed bg-card p-6 flex items-center justify-center">
+          <p className="text-sm text-muted-foreground">No API keys — add one above</p>
         </div>
       )}
     </div>
@@ -248,7 +309,7 @@ export function SettingsSecretsPage() {
   return (
     <div>
       <Section
-        title="API Key"
+        title="API Keys"
         description="Authenticates external requests to /api endpoints. Pass via the x-api-key header."
       >
         <ApiKeySection />
