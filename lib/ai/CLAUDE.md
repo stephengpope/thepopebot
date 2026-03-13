@@ -28,7 +28,7 @@ Two agent types, both using `createReactAgent` from `@langchain/langgraph/prebui
 
 | Provider | `LLM_PROVIDER` | Default Model | Required Env |
 |----------|----------------|---------------|-------------|
-| Anthropic | `anthropic` (default) | `claude-sonnet-4-20250514` | `ANTHROPIC_API_KEY` |
+| Anthropic | `anthropic` (default) | `claude-sonnet-4-6-20250514` | `ANTHROPIC_API_KEY` |
 | OpenAI | `openai` | `gpt-4o` | `OPENAI_API_KEY` |
 | Google | `google` | `gemini-2.5-flash` | `GOOGLE_API_KEY` |
 | Custom | `custom` | — | `OPENAI_BASE_URL`, `CUSTOM_API_KEY` (optional) |
