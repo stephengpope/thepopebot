@@ -47,6 +47,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Prepare log directory
+        run: |
+          JOB_ID="${{ github.ref_name }}"
+          JOB_ID="${JOB_ID#job/}"
+          mkdir -p "logs/${JOB_ID}"
+
       - name: Run thepopebot Agent
         env:
           ALL_SECRETS: ${{ toJson(secrets) }}
