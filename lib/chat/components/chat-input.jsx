@@ -76,6 +76,14 @@ export function ChatInput({ input, setInput, onSubmit, status, stop, files, setF
     textareaRef.current?.focus();
   }, []);
 
+  // Refocus textarea after streaming completes (layout swap causes focus loss)
+  useEffect(() => {
+    if (!isStreaming && !disabled) {
+      const timer = setTimeout(() => textareaRef.current?.focus(), 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isStreaming, disabled]);
+
   const handleFiles = useCallback((fileList) => {
     const newFiles = Array.from(fileList).filter(isAcceptedType);
     if (newFiles.length === 0) return;
