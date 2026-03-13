@@ -152,7 +152,15 @@ async function main() {
       execSync(`git config --global user.name "${ghUser.name || ghUser.login}"`, { stdio: 'ignore' });
       execSync(`git config --global user.email "${ghUser.login}@users.noreply.github.com"`, { stdio: 'ignore' });
       clack.log.success('Git identity set from GitHub');
-    } catch {}
+    } catch {
+      clack.log.error(
+        'Could not set git identity automatically. Git requires your name and email to make commits.\n' +
+        'Please run the following commands and re-run setup:\n\n' +
+        '  git config --global user.name "Your Name"\n' +
+        '  git config --global user.email "you@example.com"'
+      );
+      process.exit(1);
+    }
   }
 
   if (prereqs.git.remoteInfo) {
