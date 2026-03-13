@@ -111,6 +111,19 @@ export function ChatInput({ input, setInput, onSubmit, status, stop, files, setF
     }
   };
 
+  const handlePaste = useCallback((e) => {
+    if (!e.clipboardData?.items) return;
+    const imageItems = Array.from(e.clipboardData.items).filter(
+      (item) => item.type.startsWith('image/')
+    );
+    if (imageItems.length === 0) return;
+    e.preventDefault();
+    const imageFiles = imageItems.map((item) => item.getAsFile()).filter(Boolean);
+    if (imageFiles.length > 0) {
+      handleFiles(imageFiles);
+    }
+  }, [handleFiles]);
+
   const handleDragOver = (e) => {
     e.preventDefault();
     setIsDragging(true);
@@ -202,6 +215,7 @@ export function ChatInput({ input, setInput, onSubmit, status, stop, files, setF
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder={placeholder}
             rows={1}
             className={cn(
