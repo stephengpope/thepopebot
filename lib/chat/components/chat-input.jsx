@@ -156,10 +156,12 @@ export function ChatInput({
   }, []);
 
   useEffect(() => {
-    if (!isStreaming) {
-      textareaRef.current?.focus();
+    if (!isStreaming && !disabled) {
+      // Delay to ensure focus isn't stolen by scrollIntoView or re-renders
+      const timer = setTimeout(() => textareaRef.current?.focus(), 100);
+      return () => clearTimeout(timer);
     }
-  }, [isStreaming]);
+  }, [isStreaming, disabled]);
 
   const handleFiles = useCallback(
     (fileList) => {
@@ -299,6 +301,7 @@ export function ChatInput({
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           rows={1}
+          autoFocus
           className={cn(
             "w-full resize-none bg-transparent px-2 py-1.5 text-sm text-foreground",
             "placeholder:text-muted-foreground focus:outline-none",
