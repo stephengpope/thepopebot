@@ -146,7 +146,10 @@ async function main() {
   }
 
   // Set git identity from GitHub if not configured
-  try { execSync('git config user.name', { stdio: 'ignore' }); } catch {
+  try {
+    execSync('git config user.name', { stdio: 'ignore' });
+    execSync('git config user.email', { stdio: 'ignore' });
+  } catch {
     try {
       const ghUser = JSON.parse(execSync('gh api user', { encoding: 'utf-8', env: ghEnv() }));
       execSync(`git config --global user.name "${ghUser.name || ghUser.login}"`, { stdio: 'ignore' });
@@ -178,8 +181,22 @@ async function main() {
     } catch {
       const commitSpinner = clack.spinner();
       commitSpinner.start('Creating initial commit...');
-      execSync('git commit -m "initial commit [skip ci]"', { stdio: 'ignore' });
-      commitSpinner.stop('Created initial commit');
+      try {
+        execSync('git commit -m "initial commit [skip ci]"', { stdio: 'ignore' });
+        commitSpinner.stop('Created initial commit');
+      } catch (err) {
+        commitSpinner.stop('Failed to create initial commit');
+        const errMsg = err.toString();
+        if (errMsg.includes('Author identity unknown') || errMsg.includes('unable to auto-detect email')) {
+          clack.log.error(
+            'Git identity not configured. Run:\n' +
+            '  git config --global user.email "you@example.com"\n' +
+            '  git config --global user.name "Your Name"'
+          );
+          process.exit(1);
+        }
+        throw err;
+      }
     }
 
     // Ask for project name
