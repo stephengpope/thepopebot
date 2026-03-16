@@ -105,24 +105,6 @@ export function AppSidebar({ user }) {
       {!collapsed && (
         <SidebarContent>
           <SidebarMenu>
-            {/* Chats history */}
-            <SidebarMenuItem>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <SidebarMenuButton
-                    href="/chats"
-                    className={collapsed ? 'justify-center' : ''}
-                  >
-                    <MessageIcon size={16} />
-                    {!collapsed && <span>Chats</span>}
-                  </SidebarMenuButton>
-                </TooltipTrigger>
-                {collapsed && (
-                  <TooltipContent side="right">Chats</TooltipContent>
-                )}
-              </Tooltip>
-            </SidebarMenuItem>
-
             {/* Clusters */}
             {features?.clusterWorkspace && (
             <SidebarMenuItem>
@@ -142,6 +124,24 @@ export function AppSidebar({ user }) {
               </Tooltip>
             </SidebarMenuItem>
             )}
+
+            {/* Chats history */}
+            <SidebarMenuItem>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <SidebarMenuButton
+                    href="/chats"
+                    className={collapsed ? 'justify-center' : ''}
+                  >
+                    <MessageIcon size={16} />
+                    {!collapsed && <span>Chats</span>}
+                  </SidebarMenuButton>
+                </TooltipTrigger>
+                {collapsed && (
+                  <TooltipContent side="right">Chats</TooltipContent>
+                )}
+              </Tooltip>
+            </SidebarMenuItem>
 
             {/* Runners */}
             <SidebarMenuItem>
