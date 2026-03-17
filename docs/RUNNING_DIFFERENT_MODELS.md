@@ -17,12 +17,13 @@ Set these in your `.env` file:
 
 | Variable | Description |
 |----------|-------------|
-| `LLM_PROVIDER` | `anthropic` (default), `openai`, `google`, or `custom` |
-| `LLM_MODEL` | Model name (e.g. `claude-sonnet-4-20250514`, `gpt-4o`) — uses provider default if unset |
+| `LLM_PROVIDER` | `anthropic` (default), `openai`, `google`, `novita`, or `custom` |
+| `LLM_MODEL` | Model name (e.g. `claude-sonnet-4-20250514`, `gpt-4o`, `deepseek/deepseek-v3.2`) — uses provider default if unset |
 | `LLM_MAX_TOKENS` | Max tokens for responses (default: `4096`) |
 | `ANTHROPIC_API_KEY` | Required for `anthropic` provider |
 | `OPENAI_API_KEY` | Required for `openai` provider |
 | `GOOGLE_API_KEY` | Required for `google` provider |
+| `NOVITA_API_KEY` | Required for `novita` provider |
 | `CUSTOM_API_KEY` | Required for `custom` provider (if the endpoint needs auth) |
 | `OPENAI_BASE_URL` | Custom OpenAI-compatible base URL (for `custom` provider, e.g. `http://localhost:11434/v1`) |
 
@@ -77,6 +78,45 @@ npx thepopebot set-var RUNS_ON self-hosted
 ```
 
 Now your chat uses Claude while every job runs on the local Ollama instance.
+
+## Using Novita
+
+Novita provides an OpenAI-compatible LLM API at `https://api.novita.ai/openai`, so it works as a first-class provider for both the Event Handler and agent jobs.
+
+### Event Handler with Novita
+
+Add to your `.env`:
+
+```bash
+LLM_PROVIDER=novita
+LLM_MODEL=deepseek/deepseek-v3.2
+NOVITA_API_KEY=your-novita-api-key
+```
+
+### Jobs with Novita
+
+Set GitHub repo variables:
+
+```bash
+npx thepopebot set-var LLM_PROVIDER novita
+npx thepopebot set-var LLM_MODEL deepseek/deepseek-v3.2
+```
+
+Set the API key as a GitHub secret:
+
+```bash
+npx thepopebot set-agent-secret NOVITA_API_KEY your-novita-api-key
+```
+
+### Available Built-In Novita Models
+
+| Model | Description |
+|-------|-------------|
+| `deepseek/deepseek-v3.2` | Default balanced reasoning and coding model |
+| `zai-org/glm-5` | GLM-5 through Novita |
+| `minimax/minimax-m2.5` | MiniMax M2.5 through Novita |
+
+Get your API key at [https://novita.ai/settings/key-management](https://novita.ai/settings/key-management).
 
 ## Per-Job Overrides
 
