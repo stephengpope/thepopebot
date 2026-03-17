@@ -19,6 +19,7 @@ export const CONFIG_TARGETS = {
   ANTHROPIC_API_KEY:     { dbSecret: true, secret: 'AGENT_ANTHROPIC_API_KEY' },
   OPENAI_API_KEY:        { dbSecret: true, secret: 'AGENT_OPENAI_API_KEY' },
   GOOGLE_API_KEY:        { dbSecret: true, secret: 'AGENT_GOOGLE_API_KEY' },
+  NOVITA_API_KEY:        { dbSecret: true, secret: 'AGENT_NOVITA_API_KEY' },
   CUSTOM_API_KEY:        { dbSecret: true, secret: 'AGENT_CUSTOM_API_KEY' },
   CLAUDE_CODE_OAUTH_TOKEN: { dbSecret: true, secret: 'AGENT_CLAUDE_CODE_OAUTH_TOKEN' },
   GH_WEBHOOK_SECRET:     { dbSecret: true, secret: true },

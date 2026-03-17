@@ -104,7 +104,10 @@ The matching API key must already exist as a GitHub secret (see the Providers ta
 | `anthropic` | Anthropic (default) | `claude-sonnet-4-20250514` | `AGENT_ANTHROPIC_API_KEY` |
 | `openai` | OpenAI | `gpt-4o` | `AGENT_OPENAI_API_KEY` |
 | `google` | Google Gemini | `gemini-2.5-pro` | `AGENT_GOOGLE_API_KEY` |
+| `novita` | Novita OpenAI-compatible API | `deepseek/deepseek-v3.2` | `AGENT_NOVITA_API_KEY` |
 | `custom` | Any OpenAI-compatible API (DeepSeek, Ollama, Together AI, etc.) | `deepseek-chat` | `AGENT_CUSTOM_API_KEY` *(if required — see below)* |
+
+`novita` is a built-in provider in the app, but for PI agent jobs it is configured through generated `models.json` using Novita's OpenAI-compatible base URL `https://api.novita.ai/openai`.
 
 ## Using the `custom` Provider
 

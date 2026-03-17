@@ -24,6 +24,7 @@ const SECRET_HELP = {
   AGENT_ANTHROPIC_API_KEY: 'Anthropic API key for running LLM calls during agent jobs.',
   AGENT_OPENAI_API_KEY: 'OpenAI API key for running LLM calls during agent jobs.',
   AGENT_GOOGLE_API_KEY: 'Google AI API key for running LLM calls during agent jobs.',
+  AGENT_NOVITA_API_KEY: 'Novita API key for running OpenAI-compatible LLM calls during agent jobs.',
   AGENT_CUSTOM_API_KEY: 'API key for custom/self-hosted LLM providers during agent jobs.',
   AGENT_CLAUDE_CODE_OAUTH_TOKEN: 'OAuth token for the Claude Code agent backend.',
   AGENT_LLM_BRAVE_API_KEY: 'Brave Search API key — enables web search during agent jobs.',

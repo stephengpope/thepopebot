@@ -31,9 +31,12 @@ Two agent types, both using `createReactAgent` from `@langchain/langgraph/prebui
 | Anthropic | `anthropic` (default) | `claude-sonnet-4-20250514` | `ANTHROPIC_API_KEY` |
 | OpenAI | `openai` | `gpt-4o` | `OPENAI_API_KEY` |
 | Google | `google` | `gemini-2.5-flash` | `GOOGLE_API_KEY` |
+| Novita | `novita` | `deepseek/deepseek-v3.2` | `NOVITA_API_KEY` |
 | Custom | `custom` | — | `OPENAI_BASE_URL`, `CUSTOM_API_KEY` (optional) |
 
 `LLM_MAX_TOKENS` defaults to 4096. Web search available for `anthropic` and `openai` providers only (disable with `WEB_SEARCH=false`).
+
+> **Novita provider note:** Novita uses the OpenAI-compatible API at `https://api.novita.ai/openai` with provider-prefixed model IDs such as `deepseek/deepseek-v3.2`.
 
 > **Google model compatibility note:** `gemini-2.5-pro` and all `gemini-3.*` models require `thought_signature` round-tripping that `@langchain/google-genai` does not yet support. Setting `LLM_MODEL` to one of these will automatically fall back to `gemini-2.5-flash` at runtime with a warning. Supported Gemini models: `gemini-2.5-flash` (default), `gemini-2.5-flash-lite`. Full support for thinking models is tracked in issue #201.
 

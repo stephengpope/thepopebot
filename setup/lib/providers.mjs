@@ -2,7 +2,7 @@
  * Provider registry — single source of truth for PI agent LLM providers.
  *
  * "builtin" means PI has a built-in provider (no models.json needed).
- * Non-builtin providers (openai, custom) require a .pi/agent/models.json entry.
+ * Non-builtin providers (openai, novita, custom) require a .pi/agent/models.json entry.
  */
 export const PROVIDERS = {
   anthropic: {
@@ -43,6 +43,20 @@ export const PROVIDERS = {
     models: [
       { id: 'gemini-3.1-pro', name: 'Gemini 3.1 Pro', default: true },
       { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
+    ],
+  },
+  novita: {
+    label: 'Novita',
+    name: 'Novita',
+    envKey: 'NOVITA_API_KEY',
+    keyPage: 'https://novita.ai/settings/key-management',
+    builtin: false,
+    baseUrl: 'https://api.novita.ai/openai',
+    api: 'openai-completions',
+    models: [
+      { id: 'deepseek/deepseek-v3.2', name: 'DeepSeek V3.2', default: true },
+      { id: 'zai-org/glm-5', name: 'GLM-5' },
+      { id: 'minimax/minimax-m2.5', name: 'MiniMax M2.5' },
     ],
   },
 };
