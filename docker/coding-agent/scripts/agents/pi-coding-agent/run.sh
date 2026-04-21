@@ -6,7 +6,7 @@
 PI_ARGS=(-p "$PROMPT" --mode json)
 
 if [ -n "$LLM_MODEL" ]; then
-    PI_ARGS+=(-m "$LLM_MODEL")
+    PI_ARGS+=(--model "$LLM_MODEL")
 fi
 
 if [ -n "$CUSTOM_OPENAI_BASE_URL" ]; then
