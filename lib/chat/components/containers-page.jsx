@@ -341,14 +341,14 @@ function ContainerRow({ container, onRequestStop, onShowLogs, isStopping, isStar
           <button
             onClick={() => handleAction('remove')}
             disabled={removingContainer}
-            className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium border transition-colors disabled:opacity-50 disabled:pointer-events-none ${
+            title={confirmingRemove ? 'Click to confirm' : 'Remove'}
+            className={`inline-flex items-center justify-center rounded-md p-1.5 text-xs font-medium border transition-colors disabled:opacity-50 disabled:pointer-events-none ${
               confirmingRemove
                 ? 'border-destructive text-destructive hover:bg-destructive/10'
                 : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground'
             }`}
           >
             {removingContainer ? <SpinnerIcon size={12} /> : <TrashIcon size={12} />}
-            {confirmingRemove ? 'Confirm' : 'Remove'}
           </button>
         </div>
       </td>
