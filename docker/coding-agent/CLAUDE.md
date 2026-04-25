@@ -94,7 +94,7 @@ Called before any agent interaction. Set up credentials so the agent can authent
 Examples:
 - **claude-code**: Unsets `ANTHROPIC_API_KEY` when using OAuth so Claude Code uses the OAuth token instead
 - **pi-coding-agent**: No-op — Pi reads API keys directly from standard env vars
-- **codex-cli**: Pipes `OPENAI_API_KEY` into `codex login --with-api-key`
+- **codex-cli**: Writes Codex ChatGPT OAuth `auth.json` when `CODEX_OAUTH_TOKEN` contains that payload, or pipes `OPENAI_API_KEY` into `codex login --with-api-key`
 
 #### `setup.sh` — Agent configuration
 
