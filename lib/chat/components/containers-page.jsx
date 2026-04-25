@@ -11,6 +11,9 @@ import {
   stopDockerContainer,
   startDockerContainer,
   removeDockerContainer,
+  listSavedContainerLogs,
+  getSavedContainerLogs,
+  deleteSavedContainerLogs,
 } from '../actions.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -95,13 +98,28 @@ function StateBadge({ state }) {
 // Container Logs Dialog
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ContainerLogsDialog({ containerName, onClose }) {
+function ContainerLogsDialog({ containerName, savedMode, onClose }) {
   const [logs, setLogs] = useState([]);
+  const [rawLogs, setRawLogs] = useState(null);
   const [exitCode, setExitCode] = useState(null);
-  const [streaming, setStreaming] = useState(true);
+  const [streaming, setStreaming] = useState(!savedMode);
+  const [capturedAt, setCapturedAt] = useState(null);
   const outputRef = useRef(null);
 
   useEffect(() => {
+    if (savedMode) {
+      getSavedContainerLogs(containerName).then((data) => {
+        if (data) {
+          setRawLogs(data.logs || '');
+          setCapturedAt(data.capturedAt);
+        } else {
+          setRawLogs('');
+        }
+        setStreaming(false);
+      });
+      return;
+    }
+
     const es = new EventSource(`/stream/containers/logs?name=${encodeURIComponent(containerName)}`);
 
     es.addEventListener('log', (e) => {
@@ -126,22 +144,19 @@ function ContainerLogsDialog({ containerName, onClose }) {
     });
 
     return () => es.close();
-  }, [containerName]);
+  }, [containerName, savedMode]);
 
-  // Lock body scroll while dialog is open
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = ''; };
   }, []);
 
-  // Auto-scroll
   useEffect(() => {
     if (outputRef.current) {
       outputRef.current.scrollTop = outputRef.current.scrollHeight;
     }
-  }, [logs.length]);
+  }, [logs.length, rawLogs]);
 
-  // Escape to close
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
@@ -156,10 +171,13 @@ function ContainerLogsDialog({ containerName, onClose }) {
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <span className="text-sm font-semibold truncate">{containerName}</span>
             {streaming && (
-              <span className="inline-block h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="inline-block h-2 w-2 rounded-full bg-green-500 animate-pulse shrink-0" />
+            )}
+            {capturedAt && (
+              <span className="text-xs text-muted-foreground shrink-0">Captured {timeAgo(capturedAt)}</span>
             )}
           </div>
           <button
@@ -173,7 +191,20 @@ function ContainerLogsDialog({ containerName, onClose }) {
 
         {/* Body */}
         <div ref={outputRef} className="flex-1 overflow-auto p-4 min-h-[120px] font-mono text-xs">
-          {logs.length > 0 ? (
+          {savedMode ? (
+            rawLogs !== null ? (
+              rawLogs ? (
+                <pre className="whitespace-pre-wrap break-words text-foreground">{rawLogs}</pre>
+              ) : (
+                <span className="text-sm text-muted-foreground">No output</span>
+              )
+            ) : (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <SpinnerIcon size={14} className="animate-spin" />
+                Loading logs...
+              </div>
+            )
+          ) : logs.length > 0 ? (
             <CodeLogView logs={logs} />
           ) : streaming ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -189,7 +220,7 @@ function ContainerLogsDialog({ containerName, onClose }) {
         {!streaming && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-border">
             <span className={`text-xs font-medium ${exitCode === 0 ? 'text-green-500' : exitCode !== null ? 'text-destructive' : 'text-muted-foreground'}`}>
-              {exitCode !== null ? (exitCode === 0 ? 'Completed' : `Exited with code ${exitCode}`) : 'Stream ended'}
+              {savedMode ? 'Saved logs' : exitCode !== null ? (exitCode === 0 ? 'Completed' : `Exited with code ${exitCode}`) : 'Stream ended'}
             </span>
             <button
               type="button"
@@ -326,14 +357,131 @@ function ContainerRow({ container, onRequestStop, onShowLogs, isStopping, isStar
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Saved Container Row (for Removed tab)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SavedContainerRow({ entry, onShowLogs, onDelete }) {
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const confirmTimer = useRef(null);
+
+  useEffect(() => {
+    return () => { if (confirmTimer.current) clearTimeout(confirmTimer.current); };
+  }, []);
+
+  async function handleDelete() {
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      confirmTimer.current = setTimeout(() => setConfirmingDelete(false), 3000);
+      return;
+    }
+    setConfirmingDelete(false);
+    setDeleting(true);
+    try { await onDelete(entry.containerName); } catch {}
+  }
+
+  return (
+    <tr className="border-t border-border">
+      <td className="py-2.5 pr-3 whitespace-nowrap">
+        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <span className="inline-block h-2 w-2 rounded-full bg-muted-foreground/50" />
+          removed
+        </span>
+      </td>
+      <td className="py-2.5 pr-3 min-w-0 whitespace-nowrap">
+        <div className="text-sm font-medium truncate">{entry.containerName}</div>
+      </td>
+      <td className="py-2.5 pr-3 text-xs text-muted-foreground hidden lg:table-cell whitespace-nowrap">
+        {entry.capturedAt ? timeAgo(entry.capturedAt) : '—'}
+      </td>
+      <td className="py-2.5 text-right whitespace-nowrap">
+        <div className="inline-flex items-center gap-1.5">
+          <button
+            onClick={() => onShowLogs(entry.containerName)}
+            className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium border border-border text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+          >
+            Logs
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium border transition-colors disabled:opacity-50 disabled:pointer-events-none ${
+              confirmingDelete
+                ? 'border-destructive text-destructive hover:bg-destructive/10'
+                : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground'
+            }`}
+          >
+            {deleting ? <SpinnerIcon size={12} /> : <TrashIcon size={12} />}
+            {confirmingDelete ? 'Confirm' : 'Delete'}
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Container Tab Pills
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ContainerTabs({ activeTab, onTabChange, counts }) {
+  const tabs = [
+    { id: 'active', label: 'Active', count: counts.active },
+    { id: 'exited', label: 'Exited', count: counts.exited },
+    { id: 'removed', label: 'Removed', count: counts.removed },
+  ];
+
+  return (
+    <div className="flex gap-1.5">
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          onClick={() => onTabChange(tab.id)}
+          className={`rounded-full px-3 py-1.5 min-h-[36px] inline-flex items-center gap-1.5 text-xs font-medium transition-colors ${
+            activeTab === tab.id
+              ? 'bg-foreground text-background'
+              : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+          }`}
+        >
+          {tab.label}
+          {tab.count > 0 && (
+            <span className={`text-[10px] ${activeTab === tab.id ? 'opacity-70' : 'opacity-50'}`}>
+              {tab.count}
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Docker Containers Section
 // ─────────────────────────────────────────────────────────────────────────────
 
-function DockerContainersSection({ containers, loading, onRequestStop, onShowLogs, pendingStop, pendingStart }) {
+const ACTIVE_STATES = new Set(['running', 'paused', 'restarting']);
+const EXITED_STATES = new Set(['exited', 'dead', 'created']);
+
+function DockerContainersSection({ containers, savedLogs, loading, onRequestStop, onShowLogs, onShowSavedLogs, onDeleteSavedLogs, pendingStop, pendingStart }) {
+  const [tab, setTab] = useState('active');
+
+  const activeContainers = containers.filter((c) => ACTIVE_STATES.has(c.state));
+  const exitedContainers = containers.filter((c) => EXITED_STATES.has(c.state));
+
+  const counts = {
+    active: activeContainers.length,
+    exited: exitedContainers.length,
+    removed: savedLogs.length,
+  };
+
+  const displayContainers = tab === 'active' ? activeContainers : tab === 'exited' ? exitedContainers : [];
+
   if (loading) {
     return (
       <div className="space-y-4">
-        <h2 className="text-base font-medium">Docker Containers</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-medium">Docker Containers</h2>
+        </div>
         <div className="flex flex-col gap-3">
           {[...Array(3)].map((_, i) => (
             <div key={i} className="h-14 animate-pulse rounded-md bg-border/50" />
@@ -345,10 +493,43 @@ function DockerContainersSection({ containers, loading, onRequestStop, onShowLog
 
   return (
     <div className="space-y-4">
-      <h2 className="text-base font-medium">Docker Containers</h2>
-      {containers.length === 0 ? (
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-medium">Docker Containers</h2>
+        <ContainerTabs activeTab={tab} onTabChange={setTab} counts={counts} />
+      </div>
+
+      {tab === 'removed' ? (
+        savedLogs.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+            No saved container logs.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="text-xs text-muted-foreground">
+                  <th className="pb-2 pr-3 font-medium">State</th>
+                  <th className="pb-2 pr-3 font-medium">Container</th>
+                  <th className="pb-2 pr-3 font-medium hidden lg:table-cell">Captured</th>
+                  <th className="pb-2 font-medium text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {savedLogs.map((entry) => (
+                  <SavedContainerRow
+                    key={entry.containerName}
+                    entry={entry}
+                    onShowLogs={onShowSavedLogs}
+                    onDelete={onDeleteSavedLogs}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      ) : displayContainers.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-          No containers found on the compose network.
+          {tab === 'active' ? 'No active containers.' : 'No exited containers.'}
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -364,7 +545,7 @@ function DockerContainersSection({ containers, loading, onRequestStop, onShowLog
               </tr>
             </thead>
             <tbody>
-              {containers.map((c) => (
+              {displayContainers.map((c) => (
                 <ContainerRow
                   key={c.id}
                   container={c}
@@ -472,6 +653,8 @@ export function ContainersPage({ session }) {
   const [pendingStop, setPendingStop] = useState(null);
   const [pendingStart, setPendingStart] = useState(null);
   const [logsContainer, setLogsContainer] = useState(null);
+  const [logsContainerSaved, setLogsContainerSaved] = useState(false);
+  const [savedLogs, setSavedLogs] = useState([]);
   const esRef = useRef(null);
 
   const PAGE_SIZE = 10; // matches perPage in getRunnersStatus
@@ -591,10 +774,31 @@ export function ContainersPage({ session }) {
     return () => clearInterval(interval);
   }, [autoRefreshRunners]);
 
+  // ── Saved container logs ──
+
+  const loadSavedLogs = useCallback(async () => {
+    try {
+      const data = await listSavedContainerLogs();
+      setSavedLogs(data || []);
+    } catch {}
+  }, []);
+
+  useEffect(() => { loadSavedLogs(); }, [loadSavedLogs]);
+
   function refreshAll() {
     setRefreshing(true);
-    // SSE handles containers automatically; just refresh runners
     loadRunners();
+    loadSavedLogs();
+  }
+
+  function handleShowSavedLogs(containerName) {
+    setLogsContainerSaved(true);
+    setLogsContainer(containerName);
+  }
+
+  async function handleDeleteSavedLogs(containerName) {
+    await deleteSavedContainerLogs(containerName);
+    setSavedLogs((prev) => prev.filter((e) => e.containerName !== containerName));
   }
 
   // ── Container actions ──
@@ -628,9 +832,12 @@ export function ContainersPage({ session }) {
         {/* Docker Containers */}
         <DockerContainersSection
           containers={containers}
+          savedLogs={savedLogs}
           loading={containersLoading}
           onRequestStop={handleRequestAction}
-          onShowLogs={setLogsContainer}
+          onShowLogs={(name) => { setLogsContainerSaved(false); setLogsContainer(name); }}
+          onShowSavedLogs={handleShowSavedLogs}
+          onDeleteSavedLogs={handleDeleteSavedLogs}
           pendingStop={pendingStop}
           pendingStart={pendingStart}
         />
@@ -691,7 +898,8 @@ export function ContainersPage({ session }) {
       {logsContainer && (
         <ContainerLogsDialog
           containerName={logsContainer}
-          onClose={() => setLogsContainer(null)}
+          savedMode={logsContainerSaved}
+          onClose={() => { setLogsContainer(null); setLogsContainerSaved(false); }}
         />
       )}
 
