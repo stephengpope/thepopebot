@@ -71,7 +71,13 @@ claude setup-token
 
 Token starts with `sk-ant-oat01-`. Add it in Admin > Event Handler > Coding Agents > Claude Code.
 
-**Codex OAuth**: Similar flow for OpenAI subscribers.
+**Codex OAuth**: OpenAI subscribers should sign in with ChatGPT using Codex locally:
+
+```bash
+codex login
+```
+
+Then add the contents of `~/.codex/auth.json` in Admin > Event Handler > LLMs > OpenAI > OAuth Tokens. The Codex container writes this payload to `~/.codex/auth.json`; a single access token is not enough.
 
 **Multi-token rotation**: You can add multiple OAuth tokens. The system uses LRU (least-recently-used) rotation — each container launch picks the token that hasn't been used the longest. This helps distribute usage across subscription accounts.
 

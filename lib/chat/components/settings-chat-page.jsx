@@ -393,7 +393,7 @@ function ProviderCard({ name, slug, credentials, credentialStatuses, onUpdateCre
   // OAuth token sections per provider
   const oauthSections = {
     anthropic: { tokenType: 'claudeCode', description: 'For Claude Code CLI containers (Pro/Max subscription)' },
-    openai: { tokenType: 'codex', description: 'For Codex CLI containers (ChatGPT Plus/Pro subscription)' },
+    openai: { tokenType: 'codex', description: 'For Codex CLI containers (ChatGPT Plus/Pro auth.json)' },
   };
   const oauth = oauthSections[slug];
 
@@ -496,6 +496,10 @@ function OAuthTokenList({ tokenType = 'claudeCode', description = 'For Claude Co
     setError(null);
   };
 
+  const isCodex = tokenType === 'codex';
+  const tokenLabel = isCodex ? 'Auth JSON' : 'Token';
+  const tokenPlaceholder = isCodex ? 'Paste ~/.codex/auth.json contents...' : 'Paste OAuth token...';
+
   if (loading) {
     return <div className="h-16 animate-pulse rounded-md bg-border/50" />;
   }
@@ -532,15 +536,27 @@ function OAuthTokenList({ tokenType = 'claudeCode', description = 'For Claude Co
               />
             </div>
             <div>
-              <label className="text-xs font-medium mb-1 block">Token</label>
-              <input
-                type="password"
-                value={newToken}
-                onChange={(e) => setNewToken(e.target.value)}
-                placeholder="Paste OAuth token..."
-                className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
-                onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-              />
+              <label className="text-xs font-medium mb-1 block">{tokenLabel}</label>
+              {isCodex ? (
+                <textarea
+                  value={newToken}
+                  onChange={(e) => setNewToken(e.target.value)}
+                  placeholder={tokenPlaceholder}
+                  rows={5}
+                  spellCheck={false}
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-foreground resize-y"
+                  onKeyDown={(e) => (e.metaKey || e.ctrlKey) && e.key === 'Enter' && handleCreate()}
+                />
+              ) : (
+                <input
+                  type="password"
+                  value={newToken}
+                  onChange={(e) => setNewToken(e.target.value)}
+                  placeholder={tokenPlaceholder}
+                  className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
+                  onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+                />
+              )}
             </div>
           </div>
           <div className="mt-5 flex justify-end gap-2">
