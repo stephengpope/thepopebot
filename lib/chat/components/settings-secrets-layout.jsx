@@ -55,6 +55,8 @@ const EVENT_HANDLER_TABS = [
   { id: 'agent-secrets', label: 'Agent Secrets', href: '/admin/event-handler/agent-secrets' },
   { id: 'webhooks', label: 'Webhooks', href: '/admin/event-handler/webhooks' },
   { id: 'telegram', label: 'Telegram', href: '/admin/event-handler/telegram' },
+  { id: 'slack', label: 'Slack', href: '/admin/event-handler/slack' },
+  { id: 'teams', label: 'Teams', href: '/admin/event-handler/teams' },
   { id: 'voice', label: 'Voice', href: '/admin/event-handler/voice' },
 ];
 
