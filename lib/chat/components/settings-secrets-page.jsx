@@ -13,6 +13,10 @@ import {
   getTelegramStatus,
   validateTelegramToken,
   registerTelegramWebhook,
+  getSlackStatus,
+  validateSlackToken,
+  getTeamsStatus,
+  validateTeamsCredentials,
 } from '../actions.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -603,6 +607,521 @@ export function ApiKeysTelegramPage() {
           </div>
         </div>
 
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Slack sub-tab — Bot token + signing secret (webhook URL registered externally)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function ApiKeysSlackPage() {
+  const [status, setStatus] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // Step 1 — bot token
+  const [tokenInput, setTokenInput] = useState('');
+  const [tokenEditing, setTokenEditing] = useState(false);
+  const [tokenSaving, setTokenSaving] = useState(false);
+  const [tokenError, setTokenError] = useState(null);
+
+  // Step 2 — signing secret
+  const [secretInput, setSecretInput] = useState('');
+  const [secretEditing, setSecretEditing] = useState(false);
+  const [secretSaving, setSecretSaving] = useState(false);
+  const [secretError, setSecretError] = useState(null);
+
+  const [copied, setCopied] = useState(false);
+
+  const loadStatus = async () => {
+    try {
+      const result = await getSlackStatus();
+      setStatus(result);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadStatus();
+  }, []);
+
+  if (loading) {
+    return <div className="h-48 animate-pulse rounded-md bg-border/50" />;
+  }
+
+  const step1Done = !!status.botInfo;
+  const step2Done = step1Done && status.signingSecretSet;
+
+  const handleSaveToken = async () => {
+    setTokenSaving(true);
+    setTokenError(null);
+    const validation = await validateSlackToken(tokenInput.trim());
+    if (!validation.valid) {
+      setTokenError(validation.error || 'Invalid token');
+      setTokenSaving(false);
+      return;
+    }
+    const result = await updateApiKeySetting('SLACK_BOT_TOKEN', tokenInput.trim());
+    if (result?.error) {
+      setTokenError(result.error);
+      setTokenSaving(false);
+      return;
+    }
+    setTokenInput('');
+    setTokenEditing(false);
+    await loadStatus();
+    setTokenSaving(false);
+  };
+
+  const handleSaveSecret = async () => {
+    setSecretSaving(true);
+    setSecretError(null);
+    const result = await updateApiKeySetting('SLACK_SIGNING_SECRET', secretInput.trim());
+    if (result?.error) {
+      setSecretError(result.error);
+      setSecretSaving(false);
+      return;
+    }
+    setSecretInput('');
+    setSecretEditing(false);
+    await loadStatus();
+    setSecretSaving(false);
+  };
+
+  const handleCopyEventsUrl = async () => {
+    if (!status.eventsUrl) return;
+    try {
+      await navigator.clipboard.writeText(status.eventsUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
+  };
+
+  return (
+    <div>
+      <div className="mb-4">
+        <h2 className="text-base font-medium">Slack</h2>
+        <p className="text-sm text-muted-foreground">
+          Connect a Slack bot to receive and send messages through your agent.
+          See <a href="https://api.slack.com/apps" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">api.slack.com/apps</a> to create the app.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        {/* Step 1: Bot Token */}
+        <div className="rounded-lg border bg-card p-4">
+          <div className="flex items-start gap-3">
+            <StepIndicator n={1} state={step1Done ? 'done' : 'active'} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-medium">Bot User OAuth Token</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    From <strong>OAuth &amp; Permissions</strong> in your Slack app. Starts with <code className="text-foreground">xoxb-</code>.
+                  </p>
+                </div>
+                {step1Done && !tokenEditing && (
+                  <div className="shrink-0 text-right">
+                    <div className="text-sm font-medium">@{status.botInfo.username}</div>
+                    <div className="text-xs text-muted-foreground">{status.botInfo.team}</div>
+                    <button
+                      onClick={() => setTokenEditing(true)}
+                      className="text-xs text-muted-foreground hover:text-foreground underline transition-colors"
+                    >
+                      Change
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {(!step1Done || tokenEditing) && (
+                <div className="mt-3 flex flex-col gap-2">
+                  <input
+                    type="password"
+                    value={tokenInput}
+                    onChange={(e) => setTokenInput(e.target.value)}
+                    placeholder="xoxb-..."
+                    className="rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
+                    onKeyDown={(e) => e.key === 'Enter' && tokenInput.trim() && handleSaveToken()}
+                  />
+                  {tokenError && <div className="text-xs text-destructive">{tokenError}</div>}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleSaveToken}
+                      disabled={tokenSaving || !tokenInput.trim()}
+                      className="rounded-md bg-foreground text-background px-2.5 py-1.5 text-xs font-medium hover:bg-foreground/90 disabled:opacity-50 transition-colors"
+                    >
+                      {tokenSaving ? 'Validating...' : 'Validate & Save'}
+                    </button>
+                    {tokenEditing && (
+                      <button
+                        onClick={() => { setTokenEditing(false); setTokenInput(''); setTokenError(null); }}
+                        className="rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Step 2: Signing Secret */}
+        <div className={`rounded-lg border bg-card p-4 ${!step1Done ? 'opacity-50 pointer-events-none' : ''}`}>
+          <div className="flex items-start gap-3">
+            <StepIndicator n={2} state={step2Done ? 'done' : step1Done ? 'active' : 'pending'} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-medium">Signing Secret</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    From <strong>Basic Information</strong> in your Slack app. Used to verify webhook signatures.
+                  </p>
+                </div>
+                {step2Done && !secretEditing && (
+                  <button
+                    onClick={() => setSecretEditing(true)}
+                    className="shrink-0 text-xs text-muted-foreground hover:text-foreground underline transition-colors"
+                  >
+                    Change
+                  </button>
+                )}
+              </div>
+
+              {(!step2Done || secretEditing) && (
+                <div className="mt-3 flex flex-col gap-2">
+                  <input
+                    type="password"
+                    value={secretInput}
+                    onChange={(e) => setSecretInput(e.target.value)}
+                    placeholder="32-character hex string"
+                    className="rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
+                    onKeyDown={(e) => e.key === 'Enter' && secretInput.trim() && handleSaveSecret()}
+                  />
+                  {secretError && <div className="text-xs text-destructive">{secretError}</div>}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleSaveSecret}
+                      disabled={!step1Done || secretSaving || !secretInput.trim()}
+                      className="rounded-md bg-foreground text-background px-2.5 py-1.5 text-xs font-medium hover:bg-foreground/90 disabled:opacity-50 transition-colors"
+                    >
+                      {secretSaving ? 'Saving...' : 'Save'}
+                    </button>
+                    {secretEditing && (
+                      <button
+                        onClick={() => { setSecretEditing(false); setSecretInput(''); setSecretError(null); }}
+                        className="rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Step 3: Events URL (display + copy) */}
+        <div className={`rounded-lg border bg-card p-4 ${!step2Done ? 'opacity-50 pointer-events-none' : ''}`}>
+          <div className="flex items-start gap-3">
+            <StepIndicator n={3} state={step2Done ? 'active' : 'pending'} />
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-medium">Events Request URL</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                In Slack: <strong>Event Subscriptions</strong> → enable events → paste this URL → subscribe to bot events
+                {' '}<code className="text-foreground">app_mention</code>,{' '}<code className="text-foreground">message.im</code>.
+                Slack will hit it once with a verification challenge.
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                <code className="flex-1 rounded-md bg-muted px-3 py-2 text-xs text-foreground font-mono truncate">
+                  {status.eventsUrl || '(set APP_URL to generate)'}
+                </code>
+                <button
+                  onClick={handleCopyEventsUrl}
+                  disabled={!status.eventsUrl}
+                  className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 transition-colors"
+                >
+                  {copied ? <><CheckIcon size={12} /> Copied</> : <><CopyIcon size={12} /> Copy</>}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Microsoft Teams sub-tab — App ID + Password (messaging endpoint registered externally)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function ApiKeysTeamsPage() {
+  const [status, setStatus] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const [appIdInput, setAppIdInput] = useState('');
+  const [appIdEditing, setAppIdEditing] = useState(false);
+  const [appIdSaving, setAppIdSaving] = useState(false);
+
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordEditing, setPasswordEditing] = useState(false);
+  const [passwordSaving, setPasswordSaving] = useState(false);
+
+  const [validating, setValidating] = useState(false);
+  const [validationMessage, setValidationMessage] = useState(null);
+
+  const [copied, setCopied] = useState(false);
+
+  const loadStatus = async () => {
+    try {
+      const result = await getTeamsStatus();
+      setStatus(result);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadStatus();
+  }, []);
+
+  if (loading) {
+    return <div className="h-48 animate-pulse rounded-md bg-border/50" />;
+  }
+
+  const step1Done = status.appIdSet;
+  const step2Done = step1Done && status.appPasswordSet;
+  const credentialsValid = status.credentialsValid;
+
+  const handleSaveAppId = async () => {
+    setAppIdSaving(true);
+    const result = await updateApiKeySetting('TEAMS_APP_ID', appIdInput.trim());
+    setAppIdSaving(false);
+    if (result?.error) return;
+    setAppIdInput('');
+    setAppIdEditing(false);
+    await loadStatus();
+  };
+
+  const handleSavePassword = async () => {
+    setPasswordSaving(true);
+    const result = await updateApiKeySetting('TEAMS_APP_PASSWORD', passwordInput.trim());
+    setPasswordSaving(false);
+    if (result?.error) return;
+    setPasswordInput('');
+    setPasswordEditing(false);
+    await loadStatus();
+  };
+
+  const handleValidate = async () => {
+    setValidating(true);
+    setValidationMessage(null);
+    const id = appIdEditing ? appIdInput.trim() : status.appId;
+    const pw = passwordEditing ? passwordInput.trim() : null;
+    if (!id || !pw) {
+      setValidationMessage({ type: 'error', text: 'Both App ID and a freshly-entered Password are required to validate.' });
+      setValidating(false);
+      return;
+    }
+    const result = await validateTeamsCredentials(id, pw);
+    setValidationMessage(
+      result.valid
+        ? { type: 'success', text: 'Credentials are valid — Microsoft accepted the token request.' }
+        : { type: 'error', text: result.error || 'Validation failed' }
+    );
+    setValidating(false);
+  };
+
+  const handleCopyEndpoint = async () => {
+    if (!status.messagingEndpoint) return;
+    try {
+      await navigator.clipboard.writeText(status.messagingEndpoint);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
+  };
+
+  return (
+    <div>
+      <div className="mb-4">
+        <h2 className="text-base font-medium">Microsoft Teams</h2>
+        <p className="text-sm text-muted-foreground">
+          Connect a Teams bot via Azure Bot registration.
+          See <a href="https://portal.azure.com/" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">portal.azure.com</a> → create an Azure Bot resource.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        {/* Step 1: App ID */}
+        <div className="rounded-lg border bg-card p-4">
+          <div className="flex items-start gap-3">
+            <StepIndicator n={1} state={step1Done ? 'done' : 'active'} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-medium">Microsoft App ID</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Found in the Azure Bot resource → <strong>Configuration</strong>.
+                  </p>
+                </div>
+                {step1Done && !appIdEditing && (
+                  <button
+                    onClick={() => setAppIdEditing(true)}
+                    className="shrink-0 text-xs text-muted-foreground hover:text-foreground underline transition-colors"
+                  >
+                    Change
+                  </button>
+                )}
+              </div>
+              {(!step1Done || appIdEditing) && (
+                <div className="mt-3 flex flex-col gap-2">
+                  <input
+                    type="text"
+                    value={appIdInput}
+                    onChange={(e) => setAppIdInput(e.target.value)}
+                    placeholder="00000000-0000-0000-0000-000000000000"
+                    className="rounded-md border border-border bg-background px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-foreground"
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleSaveAppId}
+                      disabled={appIdSaving || !appIdInput.trim()}
+                      className="rounded-md bg-foreground text-background px-2.5 py-1.5 text-xs font-medium hover:bg-foreground/90 disabled:opacity-50 transition-colors"
+                    >
+                      {appIdSaving ? 'Saving...' : 'Save'}
+                    </button>
+                    {appIdEditing && (
+                      <button
+                        onClick={() => { setAppIdEditing(false); setAppIdInput(''); }}
+                        className="rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+              {step1Done && !appIdEditing && status.appId && (
+                <div className="mt-2 text-xs font-mono text-muted-foreground truncate">
+                  {status.appId}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Step 2: App Password */}
+        <div className={`rounded-lg border bg-card p-4 ${!step1Done ? 'opacity-50 pointer-events-none' : ''}`}>
+          <div className="flex items-start gap-3">
+            <StepIndicator n={2} state={step2Done ? 'done' : step1Done ? 'active' : 'pending'} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-medium">App Password (client secret)</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Generated from the Azure Bot → <strong>Manage</strong> → <strong>Certificates &amp; secrets</strong>.
+                    Microsoft shows it once — paste it before navigating away.
+                  </p>
+                </div>
+                {step2Done && !passwordEditing && (
+                  <button
+                    onClick={() => setPasswordEditing(true)}
+                    className="shrink-0 text-xs text-muted-foreground hover:text-foreground underline transition-colors"
+                  >
+                    Change
+                  </button>
+                )}
+              </div>
+              {(!step2Done || passwordEditing) && (
+                <div className="mt-3 flex flex-col gap-2">
+                  <input
+                    type="password"
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    placeholder="client secret value"
+                    className="rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleSavePassword}
+                      disabled={!step1Done || passwordSaving || !passwordInput.trim()}
+                      className="rounded-md bg-foreground text-background px-2.5 py-1.5 text-xs font-medium hover:bg-foreground/90 disabled:opacity-50 transition-colors"
+                    >
+                      {passwordSaving ? 'Saving...' : 'Save'}
+                    </button>
+                    {passwordEditing && (
+                      <button
+                        onClick={() => { setPasswordEditing(false); setPasswordInput(''); }}
+                        className="rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Step 3: Messaging endpoint (display + copy) + validate */}
+        <div className={`rounded-lg border bg-card p-4 ${!step2Done ? 'opacity-50 pointer-events-none' : ''}`}>
+          <div className="flex items-start gap-3">
+            <StepIndicator n={3} state={step2Done && credentialsValid ? 'done' : step2Done ? 'active' : 'pending'} />
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-medium">Messaging Endpoint</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                In the Azure Bot resource → <strong>Configuration</strong>, set the messaging endpoint to this URL.
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                <code className="flex-1 rounded-md bg-muted px-3 py-2 text-xs text-foreground font-mono truncate">
+                  {status.messagingEndpoint || '(set APP_URL to generate)'}
+                </code>
+                <button
+                  onClick={handleCopyEndpoint}
+                  disabled={!status.messagingEndpoint}
+                  className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 transition-colors"
+                >
+                  {copied ? <><CheckIcon size={12} /> Copied</> : <><CopyIcon size={12} /> Copy</>}
+                </button>
+              </div>
+
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  onClick={handleValidate}
+                  disabled={validating || !passwordEditing}
+                  className="rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 transition-colors"
+                >
+                  {validating ? 'Validating...' : 'Test credentials'}
+                </button>
+                {!passwordEditing && (
+                  <span className="text-xs text-muted-foreground">Enter App Password above to test.</span>
+                )}
+              </div>
+              {validationMessage && (
+                <div className={`mt-2 text-xs ${validationMessage.type === 'error' ? 'text-destructive' : 'text-green-500'}`}>
+                  {validationMessage.text}
+                </div>
+              )}
+              {credentialsValid && (
+                <div className="mt-2 text-xs text-green-500">
+                  Credentials valid — Microsoft is issuing access tokens.
+                </div>
+              )}
+              {status.validationError && !credentialsValid && (
+                <div className="mt-2 text-xs text-destructive">
+                  Last validation error: {status.validationError}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

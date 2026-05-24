@@ -2,18 +2,26 @@
 
 import { useState, useEffect } from 'react';
 import { PageLayout } from './page-layout.js';
-import { KeyIcon, SendIcon, CopyIcon, CheckIcon, UserIcon } from './icons.js';
+import { KeyIcon, SendIcon, CopyIcon, CheckIcon, UserIcon, SlackIcon, TeamsIcon } from './icons.js';
 import { updateProfile, updateProfileInfo } from '../../auth/actions.js';
 import {
   issueTelegramCode,
   unlinkTelegramChannel,
   setTelegramSystemMessages,
+  issueSlackCode,
+  unlinkSlackChannel,
+  setSlackSystemMessages,
+  issueTeamsCode,
+  unlinkTeamsChannel,
+  setTeamsSystemMessages,
 } from '../actions.js';
 
 const TABS = [
   { id: 'profile', label: 'Profile', href: '/profile', icon: UserIcon },
   { id: 'login', label: 'Login', href: '/profile/login', icon: KeyIcon },
   { id: 'telegram', label: 'Telegram', href: '/profile/telegram', icon: SendIcon },
+  { id: 'slack', label: 'Slack', href: '/profile/slack', icon: SlackIcon },
+  { id: 'teams', label: 'Teams', href: '/profile/teams', icon: TeamsIcon },
 ];
 
 export function ProfileLayout({ session, children }) {
@@ -576,6 +584,383 @@ function SystemMessagesToggle({ enabled, onChange }) {
           }`}
         />
       </button>
+    </div>
+  );
+}
+
+/**
+ * Slack linking UI. Mirrors the Telegram flow — issue a code, paste it as a DM
+ * to the bot in Slack. The bot must be installed in the user's workspace first.
+ */
+export function ProfileSlackPage({ initial }) {
+  const [state, setState] = useState(initial);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (state.status !== 'pending') return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [state.status]);
+
+  const handleIssue = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await issueSlackCode();
+      if (result.error) {
+        setError(result.error);
+      } else {
+        setState({
+          status: 'pending',
+          code: result.code,
+          expiresAt: result.expiresAt,
+          botUsername: result.botUsername ?? state.botUsername,
+        });
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleUnlink = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await unlinkSlackChannel();
+      setState({ status: 'unlinked', botUsername: state.botUsername });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCopy = async () => {
+    if (!state.code) return;
+    try {
+      await navigator.clipboard.writeText(`/verify ${state.code}`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
+  };
+
+  return (
+    <div className="max-w-md space-y-6">
+      <div>
+        <h2 className="text-base font-medium">Slack</h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          Link your Slack workspace to talk to the bot from any channel or DM.
+        </p>
+      </div>
+
+      {!state.botUsername && (
+        <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3 text-sm text-yellow-500">
+          Slack bot credentials are not configured. An admin needs to set
+          <code className="mx-1 px-1 rounded bg-muted text-foreground">SLACK_BOT_TOKEN</code>
+          and
+          <code className="mx-1 px-1 rounded bg-muted text-foreground">SLACK_SIGNING_SECRET</code>
+          before users can link their workspace.
+        </div>
+      )}
+
+      {error && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {state.status === 'unlinked' && (
+        <div className="rounded-lg border border-border p-4 space-y-3">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="h-2 w-2 rounded-full bg-muted-foreground" />
+            <span className="text-muted-foreground">Not linked</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleIssue}
+            disabled={busy || !state.botUsername}
+            className="rounded-md px-3 py-1.5 text-sm bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors"
+          >
+            {busy ? 'Generating...' : 'Generate code'}
+          </button>
+        </div>
+      )}
+
+      {state.status === 'pending' && (
+        <div className="rounded-lg border border-border p-4 space-y-4">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="h-2 w-2 rounded-full bg-yellow-500" />
+            <span className="text-muted-foreground">
+              Waiting for verification — expires in {formatCountdown(state.expiresAt - now)}
+            </span>
+          </div>
+
+          <ol className="text-sm space-y-2 text-muted-foreground list-decimal list-inside">
+            <li>
+              Open a DM with{' '}
+              <span className="text-foreground">@{state.botUsername || 'the bot'}</span>{' '}
+              in Slack.
+            </li>
+            <li>
+              Send this message:
+              <div className="mt-2 flex items-center gap-2">
+                <code className="flex-1 rounded-md bg-muted px-3 py-2 text-xs text-foreground font-mono">
+                  /verify {state.code}
+                </code>
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                >
+                  {copied ? <><CheckIcon size={12} /> Copied</> : <><CopyIcon size={12} /> Copy</>}
+                </button>
+              </div>
+            </li>
+          </ol>
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleIssue}
+              disabled={busy}
+              className="rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 transition-colors"
+            >
+              {busy ? 'Regenerating...' : 'Regenerate'}
+            </button>
+            <button
+              type="button"
+              onClick={handleUnlink}
+              disabled={busy}
+              className="rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {state.status === 'verified' && (
+        <div className="rounded-lg border border-border p-4 space-y-3">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="h-2 w-2 rounded-full bg-green-500" />
+            <span className="text-muted-foreground">
+              Linked to Slack channel <code className="text-foreground">{state.channelChatId}</code>
+            </span>
+          </div>
+
+          <SystemMessagesToggle
+            enabled={state.systemMessagesEnabled !== false}
+            onChange={async (next) => {
+              setState((s) => ({ ...s, systemMessagesEnabled: next }));
+              try {
+                await setSlackSystemMessages(next);
+              } catch {
+                setState((s) => ({ ...s, systemMessagesEnabled: !next }));
+                setError('Failed to update preference.');
+              }
+            }}
+          />
+
+          <button
+            type="button"
+            onClick={handleUnlink}
+            disabled={busy}
+            className="rounded-md border border-destructive px-2.5 py-1.5 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50 transition-colors"
+          >
+            {busy ? 'Unlinking...' : 'Unlink'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Teams linking UI. Mirrors the Telegram flow — issue a code, paste it as a
+ * message to the bot in Teams. The Teams app manifest must be sideloaded in
+ * the user's tenant first.
+ */
+export function ProfileTeamsPage({ initial }) {
+  const [state, setState] = useState(initial);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (state.status !== 'pending') return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [state.status]);
+
+  const handleIssue = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await issueTeamsCode();
+      if (result.error) {
+        setError(result.error);
+      } else {
+        setState({
+          status: 'pending',
+          code: result.code,
+          expiresAt: result.expiresAt,
+          configured: state.configured,
+          appId: state.appId,
+        });
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleUnlink = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await unlinkTeamsChannel();
+      setState({ status: 'unlinked', configured: state.configured, appId: state.appId });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCopy = async () => {
+    if (!state.code) return;
+    try {
+      await navigator.clipboard.writeText(`/verify ${state.code}`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
+  };
+
+  return (
+    <div className="max-w-md space-y-6">
+      <div>
+        <h2 className="text-base font-medium">Microsoft Teams</h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          Link a Teams chat to your account to talk to the bot from Teams.
+        </p>
+      </div>
+
+      {!state.configured && (
+        <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3 text-sm text-yellow-500">
+          Teams bot credentials are not configured. An admin needs to set
+          <code className="mx-1 px-1 rounded bg-muted text-foreground">TEAMS_APP_ID</code>
+          and
+          <code className="mx-1 px-1 rounded bg-muted text-foreground">TEAMS_APP_PASSWORD</code>
+          before users can link their chat.
+        </div>
+      )}
+
+      {error && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {state.status === 'unlinked' && (
+        <div className="rounded-lg border border-border p-4 space-y-3">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="h-2 w-2 rounded-full bg-muted-foreground" />
+            <span className="text-muted-foreground">Not linked</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleIssue}
+            disabled={busy || !state.configured}
+            className="rounded-md px-3 py-1.5 text-sm bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors"
+          >
+            {busy ? 'Generating...' : 'Generate code'}
+          </button>
+        </div>
+      )}
+
+      {state.status === 'pending' && (
+        <div className="rounded-lg border border-border p-4 space-y-4">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="h-2 w-2 rounded-full bg-yellow-500" />
+            <span className="text-muted-foreground">
+              Waiting for verification — expires in {formatCountdown(state.expiresAt - now)}
+            </span>
+          </div>
+
+          <ol className="text-sm space-y-2 text-muted-foreground list-decimal list-inside">
+            <li>
+              Find the bot in Microsoft Teams (your admin must have sideloaded
+              the bot manifest first).
+            </li>
+            <li>
+              Send this message:
+              <div className="mt-2 flex items-center gap-2">
+                <code className="flex-1 rounded-md bg-muted px-3 py-2 text-xs text-foreground font-mono">
+                  /verify {state.code}
+                </code>
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                >
+                  {copied ? <><CheckIcon size={12} /> Copied</> : <><CopyIcon size={12} /> Copy</>}
+                </button>
+              </div>
+            </li>
+          </ol>
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleIssue}
+              disabled={busy}
+              className="rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 transition-colors"
+            >
+              {busy ? 'Regenerating...' : 'Regenerate'}
+            </button>
+            <button
+              type="button"
+              onClick={handleUnlink}
+              disabled={busy}
+              className="rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {state.status === 'verified' && (
+        <div className="rounded-lg border border-border p-4 space-y-3">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="h-2 w-2 rounded-full bg-green-500" />
+            <span className="text-muted-foreground">
+              Linked to Teams conversation <code className="text-foreground">{state.channelChatId}</code>
+            </span>
+          </div>
+
+          <SystemMessagesToggle
+            enabled={state.systemMessagesEnabled !== false}
+            onChange={async (next) => {
+              setState((s) => ({ ...s, systemMessagesEnabled: next }));
+              try {
+                await setTeamsSystemMessages(next);
+              } catch {
+                setState((s) => ({ ...s, systemMessagesEnabled: !next }));
+                setError('Failed to update preference.');
+              }
+            }}
+          />
+
+          <button
+            type="button"
+            onClick={handleUnlink}
+            disabled={busy}
+            className="rounded-md border border-destructive px-2.5 py-1.5 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50 transition-colors"
+          >
+            {busy ? 'Unlinking...' : 'Unlink'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

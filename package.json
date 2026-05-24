@@ -21,6 +21,8 @@
     "./chat": "./lib/chat/components/index.js",
     "./chat/actions": "./lib/chat/actions.js",
     "./chat/telegram-profile": "./lib/chat/telegram-profile.js",
+    "./chat/slack-profile": "./lib/chat/slack-profile.js",
+    "./chat/teams-profile": "./lib/chat/teams-profile.js",
     "./code": "./lib/code/index.js",
     "./code/actions": "./lib/code/actions.js",
     "./code/ws-proxy": "./lib/code/ws-proxy.js",
