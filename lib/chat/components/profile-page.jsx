@@ -593,6 +593,7 @@ function SystemMessagesToggle({ enabled, onChange }) {
  * to the bot in Slack. The bot must be installed in the user's workspace first.
  */
 export function ProfileSlackPage({ initial }) {
+  // Note: uses !verify prefix — Slack intercepts /verify as a native slash command
   const [state, setState] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -639,7 +640,7 @@ export function ProfileSlackPage({ initial }) {
   const handleCopy = async () => {
     if (!state.code) return;
     try {
-      await navigator.clipboard.writeText(`/verify ${state.code}`);
+      await navigator.clipboard.writeText(`!verify ${state.code}`);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {}
@@ -706,7 +707,7 @@ export function ProfileSlackPage({ initial }) {
               Send this message:
               <div className="mt-2 flex items-center gap-2">
                 <code className="flex-1 rounded-md bg-muted px-3 py-2 text-xs text-foreground font-mono">
-                  /verify {state.code}
+                  !verify {state.code}
                 </code>
                 <button
                   type="button"
@@ -829,7 +830,7 @@ export function ProfileTeamsPage({ initial }) {
   const handleCopy = async () => {
     if (!state.code) return;
     try {
-      await navigator.clipboard.writeText(`/verify ${state.code}`);
+      await navigator.clipboard.writeText(`!verify ${state.code}`);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {}
@@ -895,7 +896,7 @@ export function ProfileTeamsPage({ initial }) {
               Send this message:
               <div className="mt-2 flex items-center gap-2">
                 <code className="flex-1 rounded-md bg-muted px-3 py-2 text-xs text-foreground font-mono">
-                  /verify {state.code}
+                  !verify {state.code}
                 </code>
                 <button
                   type="button"

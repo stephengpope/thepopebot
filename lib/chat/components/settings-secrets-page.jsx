@@ -705,8 +705,23 @@ export function ApiKeysSlackPage() {
         <h2 className="text-base font-medium">Slack</h2>
         <p className="text-sm text-muted-foreground">
           Connect a Slack bot to receive and send messages through your agent.
-          See <a href="https://api.slack.com/apps" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">api.slack.com/apps</a> to create the app.
         </p>
+        <details className="mt-2 group">
+          <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground select-none list-none flex items-center gap-1">
+            <span className="group-open:hidden">▶</span>
+            <span className="hidden group-open:inline">▼</span>
+            {' '}Setup guide — complete these steps before entering credentials below
+          </summary>
+          <ol className="mt-2 space-y-1.5 text-xs text-muted-foreground list-decimal list-outside pl-4">
+            <li>Go to <a href="https://api.slack.com/apps" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">api.slack.com/apps</a> → <strong>Create New App → From scratch</strong>. Name it and choose your workspace.</li>
+            <li><strong>OAuth &amp; Permissions → Bot Token Scopes</strong> — add: <code className="text-foreground">app_mentions:read</code>, <code className="text-foreground">channels:history</code>, <code className="text-foreground">chat:write</code>, <code className="text-foreground">im:history</code>, <code className="text-foreground">im:write</code>, <code className="text-foreground">users:read</code>.</li>
+            <li><strong>App Home → Show Tabs</strong> — enable <strong>Messages Tab</strong> and check 'Allow users to send Slash commands and messages from the messages tab'.</li>
+            <li><strong>Install to Workspace</strong> (or Reinstall if you changed scopes). Copy the <strong>Bot User OAuth Token</strong> — starts with <code className="text-foreground">xoxb-</code> — paste it in Step 1 below.</li>
+            <li><strong>Basic Information → App Credentials</strong> — copy the <strong>Signing Secret</strong> — paste it in Step 2 below.</li>
+            <li>After saving both credentials, copy the URL from Step 3 below. In your Slack app: <strong>Event Subscriptions → Enable Events → Request URL</strong> — paste it. Then subscribe to <code className="text-foreground">app_mention</code> and <code className="text-foreground">message.im</code>.</li>
+            <li>Users link their account via <strong>Profile → Slack</strong> → Generate code → send <code className="text-foreground">!verify &lt;code&gt;</code> to the bot. Use <a href="https://app.slack.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">app.slack.com</a> in a browser if the desktop app shows a stale banner.</li>
+          </ol>
+        </details>
       </div>
 
       <div className="space-y-3">
@@ -869,6 +884,9 @@ export function ApiKeysTeamsPage() {
   const [appIdEditing, setAppIdEditing] = useState(false);
   const [appIdSaving, setAppIdSaving] = useState(false);
 
+  const [tenantIdInput, setTenantIdInput] = useState('');
+  const [tenantIdSaving, setTenantIdSaving] = useState(false);
+
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordEditing, setPasswordEditing] = useState(false);
   const [passwordSaving, setPasswordSaving] = useState(false);
@@ -906,6 +924,14 @@ export function ApiKeysTeamsPage() {
     if (result?.error) return;
     setAppIdInput('');
     setAppIdEditing(false);
+    await loadStatus();
+  };
+
+  const handleSaveTenantId = async () => {
+    setTenantIdSaving(true);
+    await updateApiKeySetting('TEAMS_TENANT_ID', tenantIdInput.trim());
+    setTenantIdSaving(false);
+    setTenantIdInput('');
     await loadStatus();
   };
 
@@ -952,9 +978,25 @@ export function ApiKeysTeamsPage() {
       <div className="mb-4">
         <h2 className="text-base font-medium">Microsoft Teams</h2>
         <p className="text-sm text-muted-foreground">
-          Connect a Teams bot via Azure Bot registration.
-          See <a href="https://portal.azure.com/" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">portal.azure.com</a> → create an Azure Bot resource.
+          Connect a Teams bot via Azure Bot registration. A free Azure account is all you need.
         </p>
+        <details className="mt-2 group">
+          <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground select-none list-none flex items-center gap-1">
+            <span className="group-open:hidden">▶</span>
+            <span className="hidden group-open:inline">▼</span>
+            {' '}Setup guide — Azure portal steps required before entering credentials below
+          </summary>
+          <ol className="mt-2 space-y-1.5 text-xs text-muted-foreground list-decimal list-outside pl-4">
+            <li>Sign in to <a href="https://portal.azure.com/" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">portal.azure.com</a>. Free tier works — no paid subscription needed.</li>
+            <li>Search <strong>Microsoft Entra ID</strong> → <strong>App registrations</strong> → <strong>New registration</strong>. Name it, leave defaults, click Register.</li>
+            <li>On the app Overview, copy the <strong>Application (client) ID</strong> — this is your <strong>App ID</strong> for Step 1 below. Also copy the <strong>Directory (tenant) ID</strong> for Step 2.</li>
+            <li><strong>Certificates &amp; secrets → New client secret</strong>. Copy the <strong>Value</strong> immediately — Azure hides it after you navigate away. This is your <strong>App Password</strong> for Step 3 below.</li>
+            <li>Create resource → search <strong>Azure Bot</strong> → Create. Choose <strong>Single Tenant</strong>, paste the App ID. Set the Messaging endpoint to the URL in Step 4 below. Click Create.</li>
+            <li>Inside the Azure Bot → <strong>Channels</strong> → add <strong>Microsoft Teams</strong>. Accept the terms.</li>
+            <li>Build a manifest zip (manifest.json + color.png 192×192 + outline.png 32×32). Set <code className="text-foreground">"id"</code> and <code className="text-foreground">"bots[0].botId"</code> to your App ID. Upload via Teams → Apps → <strong>Upload a custom app</strong>.</li>
+            <li>Users link their account via <strong>Profile → Teams</strong> → Generate code → send <code className="text-foreground">!verify &lt;code&gt;</code> to the bot in Teams.</li>
+          </ol>
+        </details>
       </div>
 
       <div className="space-y-3">
@@ -1016,10 +1058,39 @@ export function ApiKeysTeamsPage() {
           </div>
         </div>
 
-        {/* Step 2: App Password */}
+        {/* Step 2: Directory (Tenant) ID — required for Single Tenant apps */}
         <div className={`rounded-lg border bg-card p-4 ${!step1Done ? 'opacity-50 pointer-events-none' : ''}`}>
           <div className="flex items-start gap-3">
-            <StepIndicator n={2} state={step2Done ? 'done' : step1Done ? 'active' : 'pending'} />
+            <StepIndicator n={2} state={status?.tenantIdSet ? 'done' : step1Done ? 'active' : 'pending'} />
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-medium">Directory (Tenant) ID</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                From Entra ID app registration Overview — the <strong>Directory (tenant) ID</strong> UUID. Required for Single Tenant apps.
+              </p>
+              <div className="mt-3 flex flex-col gap-2">
+                <input
+                  type="text"
+                  value={tenantIdInput}
+                  onChange={(e) => setTenantIdInput(e.target.value)}
+                  placeholder={status?.tenantIdSet ? '(saved — paste to update)' : '00000000-0000-0000-0000-000000000000'}
+                  className="rounded-md border border-border bg-background px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-foreground"
+                />
+                <button
+                  onClick={handleSaveTenantId}
+                  disabled={tenantIdSaving || !tenantIdInput.trim()}
+                  className="self-start rounded-md bg-foreground text-background px-2.5 py-1.5 text-xs font-medium hover:bg-foreground/90 disabled:opacity-50 transition-colors"
+                >
+                  {tenantIdSaving ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Step 3: App Password */}
+        <div className={`rounded-lg border bg-card p-4 ${!step1Done ? 'opacity-50 pointer-events-none' : ''}`}>
+          <div className="flex items-start gap-3">
+            <StepIndicator n={3} state={step2Done ? 'done' : step1Done ? 'active' : 'pending'} />
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-2">
                 <div>
@@ -1070,10 +1141,10 @@ export function ApiKeysTeamsPage() {
           </div>
         </div>
 
-        {/* Step 3: Messaging endpoint (display + copy) + validate */}
+        {/* Step 4: Messaging endpoint (display + copy) + validate */}
         <div className={`rounded-lg border bg-card p-4 ${!step2Done ? 'opacity-50 pointer-events-none' : ''}`}>
           <div className="flex items-start gap-3">
-            <StepIndicator n={3} state={step2Done && credentialsValid ? 'done' : step2Done ? 'active' : 'pending'} />
+            <StepIndicator n={4} state={step2Done && credentialsValid ? 'done' : step2Done ? 'active' : 'pending'} />
             <div className="flex-1 min-w-0">
               <h3 className="text-sm font-medium">Messaging Endpoint</h3>
               <p className="text-xs text-muted-foreground mt-0.5">

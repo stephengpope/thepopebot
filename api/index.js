@@ -318,17 +318,21 @@ async function handleTelegramWebhook(request) {
 }
 
 async function handleSlackWebhook(request) {
+  // URL verification must be answered before credentials exist — the challenge IS the auth.
+  // Clone so the original body stream remains intact for adapter.receive() below.
+  const bodyText = await request.clone().text();
+  let peeked;
+  try { peeked = JSON.parse(bodyText); } catch { peeked = {}; }
+  if (peeked.type === 'url_verification') {
+    return Response.json({ challenge: peeked.challenge });
+  }
+
   const creds = getSlackCredentials();
   if (!creds) return Response.json({ ok: true });
 
   const adapter = getSlackAdapter(creds.botToken, creds.signingSecret);
   const normalized = await adapter.receive(request);
   if (!normalized) return Response.json({ ok: true });
-
-  // Slack URL verification — must echo the challenge synchronously.
-  if (normalized.metadata?.__urlVerification) {
-    return Response.json({ challenge: normalized.metadata.challenge });
-  }
 
   processChannelMessage(adapter, normalized).catch((err) => {
     console.error('Failed to process Slack message:', err);
