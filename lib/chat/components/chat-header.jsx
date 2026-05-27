@@ -8,8 +8,10 @@ import { RenameDialog } from './ui/rename-dialog.jsx';
 import { ChevronDownIcon, StarIcon, StarFilledIcon, PencilIcon, TrashIcon, AgentIcon, CodeIcon } from './icons.js';
 import { renameChat, deleteChat, starChat } from '../actions.js';
 import { useChatNav } from './chat-nav-context.js';
+import { useBranding } from 'thepopebot/branding/provider';
 
 export function ChatHeader({ chatId: chatIdProp, workspaceId }) {
+  const { productName } = useBranding();
   const [title, setTitle] = useState(null);
   const [starred, setStarred] = useState(0);
   const [resolvedChatId, setResolvedChatId] = useState(chatIdProp || null);
@@ -77,9 +79,9 @@ export function ChatHeader({ chatId: chatIdProp, workspaceId }) {
     return () => {
       window.removeEventListener('chatTitleUpdated', titleHandler);
       window.removeEventListener('chatStarUpdated', starHandler);
-      document.title = 'ThePopeBot';
+      document.title = productName;
     };
-  }, [fetchMeta, chatId]);
+  }, [fetchMeta, chatId, productName]);
 
   // Auto-focus and select all when entering inline edit mode
   useEffect(() => {

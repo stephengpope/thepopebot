@@ -5,6 +5,7 @@ import { CirclePlusIcon, PanelLeftIcon, MessageIcon, ClusterIcon, BellIcon, Cont
 import { SidebarHistory } from './sidebar-history.js';
 import { SidebarUserNav } from './sidebar-user-nav.js';
 import { UpgradeDialog } from './upgrade-dialog.js';
+import { AttributionFooter } from './attribution-footer.js';
 import {
   Sidebar,
   SidebarContent,
@@ -17,10 +18,12 @@ import {
 } from './ui/sidebar.js';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip.js';
 import { useChatNav } from './chat-nav-context.js';
+import { useBranding } from 'thepopebot/branding/provider';
 
 export function AppSidebar({ user }) {
   const { navigateToChat } = useChatNav();
   const { state, open, setOpenMobile, toggleSidebar } = useSidebar();
+  const { productName } = useBranding();
   const collapsed = state === 'collapsed';
   const [unreadCount, setUnreadCount] = useState(0);
   const [prCount, setPrCount] = useState(0);
@@ -64,7 +67,7 @@ export function AppSidebar({ user }) {
         {/* Top row: brand name + toggle icon (open) or just toggle icon (collapsed) */}
         <div className={collapsed ? 'flex justify-center' : 'flex items-center justify-between'}>
           {!collapsed && (
-            <span className="px-2 font-semibold text-lg">ThePopeBot{version && <span className="text-[11px] font-normal text-muted-foreground"> v{version}</span>}</span>
+            <span className="px-2 font-semibold text-lg">{productName}{version && <span className="text-[11px] font-normal text-muted-foreground"> v{version}</span>}</span>
           )}
           <button
             className="inline-flex shrink-0 items-center justify-center rounded-md p-2 text-muted-foreground hover:bg-background hover:text-foreground"
@@ -287,6 +290,7 @@ export function AppSidebar({ user }) {
 
       <SidebarFooter>
         {user && <SidebarUserNav user={user} collapsed={collapsed} />}
+        <AttributionFooter collapsed={collapsed} />
       </SidebarFooter>
     </Sidebar>
     <UpgradeDialog open={upgradeOpen} onClose={() => setUpgradeOpen(false)} version={version} updateAvailable={updateAvailable} changelog={changelog} />

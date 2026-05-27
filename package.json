@@ -36,6 +36,8 @@
     "./oauth": "./lib/oauth/helper.js",
     "./oauth/providers": "./lib/oauth/providers.js",
     "./maintenance": "./lib/maintenance.js",
+    "./branding/config": "./lib/branding/config.js",
+    "./branding/provider": "./lib/branding/provider.js",
     "./package.json": "./package.json"
   },
   "files": [
@@ -48,7 +50,7 @@
     "drizzle/"
   ],
   "scripts": {
-    "build": "esbuild lib/chat/components/*.jsx lib/chat/components/**/*.jsx --outdir=lib/chat/components --format=esm --jsx=automatic --outbase=lib/chat/components && esbuild lib/auth/components/*.jsx lib/auth/components/**/*.jsx --outdir=lib/auth/components --format=esm --jsx=automatic --outbase=lib/auth/components && esbuild lib/code/*.jsx --outdir=lib/code --format=esm --jsx=automatic && esbuild lib/cluster/components/*.jsx --outdir=lib/cluster/components --format=esm --jsx=automatic",
+    "build": "esbuild lib/chat/components/*.jsx lib/chat/components/**/*.jsx --outdir=lib/chat/components --format=esm --jsx=automatic --outbase=lib/chat/components && esbuild lib/auth/components/*.jsx lib/auth/components/**/*.jsx --outdir=lib/auth/components --format=esm --jsx=automatic --outbase=lib/auth/components && esbuild lib/branding/*.jsx --outdir=lib/branding --format=esm --jsx=automatic && esbuild lib/code/*.jsx --outdir=lib/code --format=esm --jsx=automatic && esbuild lib/cluster/components/*.jsx --outdir=lib/cluster/components --format=esm --jsx=automatic",
     "prepublishOnly": "npm run build",
     "postinstall": "node -e \"import('./bin/postinstall.js').catch(()=>{})\"",
     "db:generate": "drizzle-kit generate",

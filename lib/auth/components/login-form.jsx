@@ -7,10 +7,12 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from './ui/card';
+import { useBranding } from 'thepopebot/branding/provider';
 
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { productTagline } = useBranding();
   const justCreated = searchParams.get('created') === '1';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -53,7 +55,7 @@ export function LoginForm() {
     <Card className="w-full max-w-sm">
       <CardHeader>
         <CardTitle>Sign In</CardTitle>
-        <CardDescription>Log in to your agent dashboard.</CardDescription>
+        <CardDescription>{productTagline}</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">

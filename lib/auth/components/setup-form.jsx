@@ -7,9 +7,11 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from './ui/card';
 import { setupAdmin } from '../actions.js';
+import { useBranding } from 'thepopebot/branding/provider';
 
 export function SetupForm() {
   const router = useRouter();
+  const { setupTagline } = useBranding();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -97,7 +99,7 @@ export function SetupForm() {
     <Card className="w-full max-w-sm">
       <CardHeader>
         <CardTitle>Create Admin Account</CardTitle>
-        <CardDescription>Set up your first admin account to get started.</CardDescription>
+        <CardDescription>{setupTagline}</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
