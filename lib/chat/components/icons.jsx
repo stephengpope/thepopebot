@@ -890,3 +890,46 @@ export function LogOutIcon({ size = 16 }) {
     </svg>
   );
 }
+
+export function SlackIcon({ size = 16 }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      width={size}
+      height={size}
+    >
+      <line x1="4" y1="9" x2="20" y2="9" />
+      <line x1="4" y1="15" x2="20" y2="15" />
+      <line x1="10" y1="3" x2="8" y2="21" />
+      <line x1="16" y1="3" x2="14" y2="21" />
+    </svg>
+  );
+}
+
+export function TeamsIcon({ size = 16 }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      width={size}
+      height={size}
+    >
+      <rect x="3" y="6" width="11" height="12" rx="1" />
+      <path d="M5 9h7" />
+      <path d="M8.5 9v6" />
+      <circle cx="18" cy="9" r="2" />
+      <path d="M16 14h4a1 1 0 0 1 1 1v2a3 3 0 0 1-3 3h0a3 3 0 0 1-3-3v-2a1 1 0 0 1 1-1z" />
+    </svg>
+  );
+}

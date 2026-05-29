@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual, randomUUID } from 'crypto';
 import { createAgentJob } from '../lib/tools/create-agent-job.js';
 import { getAgentJobStatus, fetchAgentJobLog } from '../lib/tools/github.js';
-import { getTelegramAdapter } from '../lib/channels/index.js';
+import { getTelegramAdapter, getSlackAdapter, getTeamsAdapter } from '../lib/channels/index.js';
 import { dispatchCommand, dispatchPreAuthCommand } from '../lib/channels/commands/index.js';
 import { getByChannelChatId, getVerifiedChannels, setActiveThread } from '../lib/db/user-channels.js';
 import { getAllUsers, getUserById } from '../lib/db/users.js';
@@ -20,9 +20,28 @@ function getTelegramBotToken() {
   return getConfig('TELEGRAM_BOT_TOKEN') || null;
 }
 
+function getSlackCredentials() {
+  const botToken = getConfig('SLACK_BOT_TOKEN') || null;
+  const signingSecret = getConfig('SLACK_SIGNING_SECRET') || null;
+  return botToken && signingSecret ? { botToken, signingSecret } : null;
+}
+
+function getTeamsCredentials() {
+  const appId = getConfig('TEAMS_APP_ID') || null;
+  const appPassword = getConfig('TEAMS_APP_PASSWORD') || null;
+  return appId && appPassword ? { appId, appPassword } : null;
+}
+
 
 // Routes that have their own authentication
-const PUBLIC_ROUTES = ['/telegram/webhook', '/github/webhook', '/ping', '/oauth/callback'];
+const PUBLIC_ROUTES = [
+  '/telegram/webhook',
+  '/slack/events',
+  '/teams/events',
+  '/github/webhook',
+  '/ping',
+  '/oauth/callback',
+];
 
 /**
  * Timing-safe string comparison.
@@ -196,6 +215,32 @@ async function pushToDefaultChannel(row, { systemMessage = false } = {}) {
       const adapter = getTelegramAdapter(botToken);
       await adapter.sendResponse(target.channelChatId, row.content, { chatId: target.channelChatId });
       markDelivered(row.id);
+    } else if (target.channel === 'slack') {
+      const creds = getSlackCredentials();
+      if (!creds) {
+        console.error(`[pushToDefaultChannel] Slack credentials not configured for user ${row.userId}`);
+        return;
+      }
+      const adapter = getSlackAdapter(creds.botToken, creds.signingSecret);
+      await adapter.sendResponse(target.channelChatId, row.content, {});
+      markDelivered(row.id);
+    } else if (target.channel === 'teams') {
+      const creds = getTeamsCredentials();
+      if (!creds) {
+        console.error(`[pushToDefaultChannel] Teams credentials not configured for user ${row.userId}`);
+        return;
+      }
+      // System pushes need a serviceUrl, which is per-conversation. We persist
+      // the last-seen serviceUrl in the user_channels metadata on each inbound
+      // message; if absent, skip (the user must message the bot first).
+      const serviceUrl = target.serviceUrl;
+      if (!serviceUrl) {
+        console.warn(`[pushToDefaultChannel] Teams serviceUrl not yet captured for user ${row.userId} — skipping push`);
+        return;
+      }
+      const adapter = getTeamsAdapter(creds.appId, creds.appPassword);
+      await adapter.sendResponse(target.channelChatId, row.content, { serviceUrl });
+      markDelivered(row.id);
     }
   } catch (err) {
     console.error(`[pushToDefaultChannel] failed for user ${row.userId}:`, err.message);
@@ -272,6 +317,45 @@ async function handleTelegramWebhook(request) {
   return Response.json({ ok: true });
 }
 
+async function handleSlackWebhook(request) {
+  // URL verification must be answered before credentials exist — the challenge IS the auth.
+  // Clone so the original body stream remains intact for adapter.receive() below.
+  const bodyText = await request.clone().text();
+  let peeked;
+  try { peeked = JSON.parse(bodyText); } catch { peeked = {}; }
+  if (peeked.type === 'url_verification') {
+    return Response.json({ challenge: peeked.challenge });
+  }
+
+  const creds = getSlackCredentials();
+  if (!creds) return Response.json({ ok: true });
+
+  const adapter = getSlackAdapter(creds.botToken, creds.signingSecret);
+  const normalized = await adapter.receive(request);
+  if (!normalized) return Response.json({ ok: true });
+
+  processChannelMessage(adapter, normalized).catch((err) => {
+    console.error('Failed to process Slack message:', err);
+  });
+
+  return Response.json({ ok: true });
+}
+
+async function handleTeamsWebhook(request) {
+  const creds = getTeamsCredentials();
+  if (!creds) return Response.json({ ok: true });
+
+  const adapter = getTeamsAdapter(creds.appId, creds.appPassword);
+  const normalized = await adapter.receive(request);
+  if (!normalized) return Response.json({ ok: true });
+
+  processChannelMessage(adapter, normalized).catch((err) => {
+    console.error('Failed to process Teams message:', err);
+  });
+
+  return Response.json({ ok: true });
+}
+
 /**
  * Resolve the incoming channel message to a user, dispatch any slash command,
  * and otherwise stream the message through the AI layer using the user's
@@ -312,9 +396,10 @@ async function processChannelMessage(adapter, normalized) {
     const envRepo = process.env.GH_OWNER && process.env.GH_REPO
       ? `${process.env.GH_OWNER}/${process.env.GH_REPO}`
       : '';
+    const channelLabel = channel.charAt(0).toUpperCase() + channel.slice(1);
     const streamOptions = {
       userId: binding.userId,
-      chatTitle: 'Telegram',
+      chatTitle: channelLabel,
       repo: envRepo,
       branch: 'main',
       codeMode: false,
@@ -505,6 +590,8 @@ async function POST(request) {
     case '/create-agent-job':     return handleCreateAgentJob(request);
     case '/send-dm':              return handleSendDm(request);
     case '/telegram/webhook':   return handleTelegramWebhook(request);
+    case '/slack/events':       return handleSlackWebhook(request);
+    case '/teams/events':       return handleTeamsWebhook(request);
     case '/github/webhook':     return handleGithubWebhook(request);
     default:                    return Response.json({ error: 'Not found' }, { status: 404 });
   }
