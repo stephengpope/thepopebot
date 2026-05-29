@@ -14,19 +14,10 @@ RUN apt-get update && \
 
 WORKDIR /app
 COPY package.json package-lock.json* ./
-# Dev override: if a local tarball (`npm pack`) was copied alongside, install
-# from it instead of the npm registry. Lets contributors bake working-tree
-# changes into the image without publishing. Falls back to npm when absent.
-COPY thepopebot-*.tgz* ./
+# Rename package to avoid npm treating "thepopebot" as a self-install
 RUN TPB_VERSION=$(node -p "require('./package.json').version") && \
     echo "{\"private\":true}" > package.json && \
-    TARBALL=$(ls thepopebot-*.tgz 2>/dev/null | head -1) && \
-    if [ -n "$TARBALL" ]; then \
-      echo "[dev] Installing local tarball: $TARBALL" && \
-      npm install --no-save "./${TARBALL}" tailwindcss @tailwindcss/postcss; \
-    else \
-      npm install --no-save "thepopebot@${TPB_VERSION}" tailwindcss @tailwindcss/postcss; \
-    fi
+    npm install --no-save "thepopebot@${TPB_VERSION}" tailwindcss @tailwindcss/postcss
 
 # ── Stage 2: Next.js build ───────────────────────────────────────
 FROM node:22-bookworm-slim AS nextjs
