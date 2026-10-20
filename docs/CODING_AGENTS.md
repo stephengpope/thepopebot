@@ -35,6 +35,28 @@ Config keys follow the pattern `CODING_AGENT_{BACKEND}_{SETTING}`:
 - `CODING_AGENT_CLAUDE_CODE_AUTH` (default: `oauth`) — `oauth` or `api-key`
 - `CODING_AGENT_CLAUDE_CODE_BACKEND` — which LLM provider Claude Code uses (can be non-Anthropic via proxy)
 - `CODING_AGENT_CLAUDE_CODE_MODEL` — model override
+- `CODING_AGENT_CLAUDE_CODE_SEARCH` (default: `parallel`) controls web tools in
+  **in-process Claude SDK live chats**. Choose **Chat web search** on the Claude
+  Code card at Admin > Event Handler > Coding Agents:
+  - **Parallel (no API key)**: search the web and fetch pages with
+    [Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp).
+    Search uses Fast mode with no account or API key. Queries and requested URLs
+    are sent to Parallel. The free service has usage limits; tool errors are
+    returned to the agent without silently switching providers.
+  - **Claude native tools**: use the existing `WebSearch` and `WebFetch` tools,
+    with their normal backend/account requirements.
+  - **Disabled**: do not register the built-in Parallel server and disable native `WebSearch` and
+    `WebFetch` for these chats. User-configured MCP servers, custom skills and
+    shell/network access are governed separately by the agent's permissions.
+
+An unset search choice now uses Parallel instead of Claude's native web tools.
+Saved selections apply on the next chat message. Parallel's two read-only web
+tools are approved in both plan and code modes; other tool permissions, LLM
+credentials and model settings are unchanged. This setting does not configure the
+interactive Docker terminal, background jobs, headless containers or other agents.
+The built-in MCP server uses the name `thepopebot-parallel-search`; existing
+user-configured servers (including `parallel-search`) retain their own URLs and
+credentials.
 
 ### Pi
 

@@ -334,6 +334,25 @@ function ClaudeCodeCard({ settings, onReload }) {
     await onReload();
   };
 
+  const [searchError, setSearchError] = useState('');
+  const handleSearchChange = async (e) => {
+    setSaving(true);
+    setSearchError('');
+    try {
+      const result = await updateCodingAgentConfig('claude-code', { search: e.target.value });
+      if (result?.error) {
+        setSearchError(result.error);
+      } else {
+        await onReload();
+        showSaved();
+      }
+    } catch {
+      setSearchError('Could not save chat search provider');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const [saved, setSaved] = useState(false);
 
   const showSaved = () => {
@@ -378,6 +397,24 @@ function ClaudeCodeCard({ settings, onReload }) {
 
       {config.enabled && (
         <div className="border-t border-border pt-3 space-y-3">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label htmlFor="claude-chat-search" className="text-sm font-medium">Chat web search</label>
+              <select
+                id="claude-chat-search"
+                value={config.search || 'parallel'}
+                onChange={handleSearchChange}
+                disabled={saving}
+                className="w-48 rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-foreground"
+              >
+                <option value="parallel">Parallel (no API key)</option>
+                <option value="native">Claude native tools</option>
+                <option value="disabled">Disabled</option>
+              </select>
+            </div>
+            <p className="text-xs text-muted-foreground">Built-in search and page fetching in live chats. Custom MCP servers, skills and Docker agents keep their configuration.</p>
+            {searchError && <p role="alert" className="text-xs text-destructive">{searchError}</p>}
+          </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium">Backend API</label>
